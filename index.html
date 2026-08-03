@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Book a Unit — The Ledger</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#12161D; --surface:#1A2029; --surface-2:#212836; --border:#2B3241;
+    --text:#EDEAE2; --text-dim:#8B93A3; --text-faint:#5A6274;
+    --accent:#C9A227; --accent-light:#E8C468; --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--bg);}
+  body{ color:var(--text); font-family:'Inter',sans-serif; font-size:14px; line-height:1.5; min-height:100vh; }
+  .wrap{ max-width:960px; margin:0 auto; padding:36px 20px 80px; }
+  .hero{ text-align:center; margin-bottom:36px; }
+  .hero h1{ font-family:'Fraunces',serif; font-size:32px; font-weight:600; margin:0 0 8px; }
+  .hero p{ color:var(--text-dim); font-size:14.5px; margin:0; }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:20px; }
+  .unit-card{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; cursor:pointer; transition:transform .15s, border-color .15s; }
+  .unit-card:hover{ transform:translateY(-2px); border-color:#394358; }
+  .unit-photo{ width:100%; height:170px; background:var(--surface-2); position:relative; overflow:hidden; }
+  .unit-photo img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .unit-photo .thumbs{ position:absolute; bottom:8px; right:8px; display:flex; gap:4px; }
+  .unit-photo .thumbs span{ width:6px;height:6px;border-radius:50%; background:rgba(255,255,255,0.5); }
+  .unit-photo-empty{ display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-faint); font-family:'Fraunces',serif; font-size:14px; }
+  .unit-body{ padding:14px 16px 16px; }
+  .unit-name{ font-family:'Fraunces',serif; font-weight:600; font-size:17px; margin-bottom:4px; }
+  .unit-cta{ font-size:12.5px; color:var(--accent-light); font-family:'IBM Plex Mono',monospace; }
+  .empty-state{ text-align:center; padding:60px 20px; color:var(--text-dim); }
+
+  .ct-overlay{ position:fixed;inset:0; background:rgba(8,10,14,0.65); display:flex;align-items:center;justify-content:center; z-index:50; backdrop-filter:blur(2px); padding:20px; overflow-y:auto; }
+  .ct-modal{ background:var(--surface); border:1px solid var(--border); border-radius:14px; width:440px; max-width:100%; padding:24px; max-height:90vh; overflow:auto; }
+  .ct-modal h3{ font-family:'Fraunces',serif; font-size:20px; margin:0 0 4px; font-weight:600; }
+  .ct-modal .sub{ color:var(--text-dim); font-size:13px; margin-bottom:18px; }
+  .gallery{ display:flex; gap:6px; margin-bottom:16px; }
+  .gallery img{ width:100%; height:90px; object-fit:cover; border-radius:8px; border:1px solid var(--border); }
+  .ct-field{margin-bottom:12px;}
+  .ct-field label{ display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:5px; }
+  .ct-field input, .ct-field textarea{ width:100%; background:var(--surface-2); border:1px solid var(--border); color:var(--text); border-radius:7px; padding:9px 11px; font-family:'Inter',sans-serif; font-size:13.5px; }
+  .ct-field textarea{resize:vertical;min-height:50px;}
+  .ct-row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .ct-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+  .ct-btn{ background:var(--surface-2); border:1px solid var(--border); color:var(--text); border-radius:7px; padding:9px 14px; cursor:pointer; font-family:'Inter',sans-serif; font-size:13.5px; font-weight:500; }
+  .ct-btn.accent{ background:var(--accent); color:#1A1608; border-color:var(--accent); font-weight:600; }
+  .ct-modal-actions{ display:flex; gap:8px; margin-top:18px; }
+  .ct-modal-actions .ct-btn{flex:1;}
+  .err{ color:#D9714E; font-size:12.5px; margin-bottom:10px; min-height:16px; }
+  .success{ text-align:center; padding:20px 4px; }
+  .success .big{ font-family:'Fraunces',serif; font-size:22px; margin-bottom:8px; }
+  .success p{ color:var(--text-dim); font-size:13.5px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div style="text-align:right;margin-bottom:-10px;">
+      <a href="staff.html" style="color:var(--text-faint);font-size:12px;font-family:'IBM Plex Mono',monospace;text-decoration:none;">Staff login →</a>
+    </div>
+    <div class="hero">
+      <h1>Find your stay</h1>
+      <p>Pick a unit below to request a booking — we'll confirm with you shortly.</p>
+    </div>
+    <div class="grid" id="units-grid"></div>
+  </div>
+
+<script>
+// ======================================================================
+const SUPABASE_URL = 'https://tpywafeapcskxwubskty.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRweXdhZmVhcGNza3h3dWJza3R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU2NzE2NTAsImV4cCI6MjEwMTI0NzY1MH0.KwK8uwOSPeJLXEcpWJlIizoa24mZjQY0yDCvo8wO_vA';
+// ======================================================================
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+(function(){
+  function escapeHtml(s){ const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+  function todayStr(){ const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+  async function loadUnits(){
+    const { data, error } = await sb.from('units').select('*').order('created_at');
+    const grid = document.getElementById('units-grid');
+    if(error){ grid.innerHTML = `<div class="empty-state">Couldn't load units right now — please try again shortly.</div>`; console.error(error); return; }
+    if(!data || data.length === 0){ grid.innerHTML = `<div class="empty-state">No units available yet.</div>`; return; }
+    grid.innerHTML = data.map(u=>{
+      const photos = u.photo_urls || [];
+      const photoHtml = photos[0]
+        ? `<img src="${escapeHtml(photos[0])}" onerror="this.parentElement.innerHTML='<div class=&quot;unit-photo-empty&quot;>${escapeHtml(u.name)}</div>'">${photos.length>1 ? `<div class="thumbs">${photos.map(()=>'<span></span>').join('')}</div>` : ''}`
+        : `<div class="unit-photo-empty">${escapeHtml(u.name)}</div>`;
+      return `<div class="unit-card" data-unit='${JSON.stringify(u).replace(/'/g,"&apos;")}'>
+        <div class="unit-photo">${photoHtml}</div>
+        <div class="unit-body">
+          <div class="unit-name">${escapeHtml(u.name)}</div>
+          <div class="unit-cta">Request to book →</div>
+        </div>
+      </div>`;
+    }).join('');
+    grid.querySelectorAll('.unit-card').forEach(card=>{
+      card.addEventListener('click', ()=> openBookingForm(JSON.parse(card.dataset.unit.replace(/&apos;/g,"'"))));
+    });
+  }
+
+  function openBookingForm(unit){
+    const photos = unit.photo_urls || [];
+    const overlay = document.createElement('div');
+    overlay.className = 'ct-overlay';
+    overlay.innerHTML = `
+      <div class="ct-modal">
+        <h3>${escapeHtml(unit.name)}</h3>
+        <div class="sub">Tell us about your stay and we'll confirm availability.</div>
+        ${photos.length ? `<div class="gallery">${photos.slice(0,3).map(p=>`<img src="${escapeHtml(p)}" onerror="this.style.display='none'">`).join('')}</div>` : ''}
+        <div class="err" id="bf-err"></div>
+        <div class="ct-field"><label>Your name</label><input id="bf-guest" placeholder="Full name"></div>
+        <div class="ct-row2">
+          <div class="ct-field"><label>Phone</label><input id="bf-phone" placeholder="+63 9xx xxx xxxx"></div>
+          <div class="ct-field"># of guests<input type="number" min="1" id="bf-guests" value="1"></div>
+        </div>
+        <div class="ct-row3">
+          <div class="ct-field"><label>Check-in date</label><input type="date" id="bf-in" value="${todayStr()}"></div>
+          <div class="ct-field"><label>Arrival time</label><input type="time" id="bf-intime"></div>
+          <div class="ct-field"><label>Check-out date</label><input type="date" id="bf-out"></div>
+        </div>
+        <div class="ct-field"><label>Notes (optional)</label><textarea id="bf-notes" placeholder="Anything we should know?"></textarea></div>
+        <div class="ct-modal-actions">
+          <button class="ct-btn" id="bf-cancel">Cancel</button>
+          <button class="ct-btn accent" id="bf-submit">Request booking</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) overlay.remove(); });
+    overlay.querySelector('#bf-cancel').addEventListener('click', ()=>overlay.remove());
+    overlay.querySelector('#bf-submit').addEventListener('click', async ()=>{
+      const guest = overlay.querySelector('#bf-guest').value.trim();
+      const phone = overlay.querySelector('#bf-phone').value.trim();
+      const guestsCount = parseInt(overlay.querySelector('#bf-guests').value,10) || 1;
+      const checkIn = overlay.querySelector('#bf-in').value;
+      const checkInTime = overlay.querySelector('#bf-intime').value;
+      const checkOut = overlay.querySelector('#bf-out').value;
+      const notes = overlay.querySelector('#bf-notes').value.trim();
+      const errEl = overlay.querySelector('#bf-err'); errEl.textContent = '';
+      if(!guest){ errEl.textContent = 'Please enter your name.'; return; }
+      if(!checkIn || !checkOut){ errEl.textContent = 'Please choose check-in and check-out dates.'; return; }
+      if(checkOut <= checkIn){ errEl.textContent = 'Check-out must be after check-in.'; return; }
+
+      const { error } = await sb.from('bookings').insert({
+        unit_id: unit.id, guest, phone: phone || null, guests_count: guestsCount,
+        check_in: checkIn, check_in_time: checkInTime || null, check_out: checkOut,
+        notes: notes || null, status: 'requested'
+      });
+      if(error){ errEl.textContent = "Something went wrong — please try again."; console.error(error); return; }
+
+      overlay.querySelector('.ct-modal').innerHTML = `
+        <div class="success">
+          <div class="big">Request sent ✓</div>
+          <p>Thanks, ${escapeHtml(guest)}! We've received your request for ${escapeHtml(unit.name)}.
+          We'll reach out to confirm it shortly.</p>
+          <button class="ct-btn accent" id="bf-close" style="margin-top:10px;">Close</button>
+        </div>`;
+      overlay.querySelector('#bf-close').addEventListener('click', ()=>overlay.remove());
+    });
+  }
+
+  loadUnits();
+})();
+</script>
+</body>
+</html>

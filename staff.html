@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Ledger — Condo Booking Tracker (Staff)</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#12161D; --surface:#1A2029; --surface-2:#212836; --border:#2B3241;
+    --text:#EDEAE2; --text-dim:#8B93A3; --text-faint:#5A6274;
+    --accent:#C9A227; --accent-light:#E8C468;
+    --upcoming:#4C7FB0; --current:#C9A227; --checkout:#D9714E; --past:#3A4150; --requested:#8B6BC7;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--bg);}
+  body{ color:var(--text); font-family:'Inter',sans-serif; font-size:14px; line-height:1.4; min-height:100vh; }
+  .mono{font-family:'IBM Plex Mono',monospace;}
+
+  #login-screen{ min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .login-card{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:36px 32px; width:360px; max-width:100%; }
+  .login-card h1{ font-family:'Fraunces',serif; font-size:24px; margin:0 0 4px; font-weight:600; }
+  .login-card .sub{ color:var(--text-dim); font-size:13px; margin-bottom:22px; }
+  .login-field{ margin-bottom:14px; }
+  .login-field label{ display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:5px; }
+  .login-field input{ width:100%; background:var(--surface-2); border:1px solid var(--border); color:var(--text); border-radius:7px; padding:10px 12px; font-size:14px; }
+  .login-error{ color:var(--checkout); font-size:12.5px; margin-bottom:10px; min-height:16px; }
+  #ct-root{ padding:28px; display:none; }
+
+  .ct-header{ display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:18px; flex-wrap:wrap; gap:14px; }
+  .ct-title{ font-family:'Fraunces',serif; font-weight:600; font-size:26px; display:flex; align-items:baseline; gap:10px; }
+  .ct-title .sub{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-faint); letter-spacing:1px; text-transform:uppercase; }
+  .ct-month-nav{ display:flex; align-items:center; gap:10px; font-family:'IBM Plex Mono',monospace; font-size:13px; }
+  .ct-btn{ background:var(--surface-2); border:1px solid var(--border); color:var(--text); border-radius:7px; padding:7px 12px; cursor:pointer; font-family:'Inter',sans-serif; font-size:13px; font-weight:500; transition:background .15s, border-color .15s; }
+  .ct-btn:hover{background:#262E3B;border-color:#394358;}
+  .ct-btn.accent{ background:var(--accent); color:#1A1608; border-color:var(--accent); font-weight:600; }
+  .ct-btn.accent:hover{background:var(--accent-light);}
+  .ct-btn.danger{ background:transparent; color:var(--checkout); border-color:var(--checkout); }
+  .ct-btn.purple{ background:transparent; color:var(--requested); border-color:var(--requested); }
+  .ct-btn.icon{ width:30px;height:30px;padding:0; display:flex;align-items:center;justify-content:center; font-size:15px; }
+  .ct-btn:disabled{opacity:.5;cursor:default;}
+  .ct-btn.small{padding:5px 10px;font-size:12px;}
+
+  .ct-tabs{ display:flex; gap:6px; margin-bottom:18px; border-bottom:1px solid var(--border); }
+  .ct-tab{ background:none; border:none; color:var(--text-dim); padding:9px 4px; margin-right:14px; font-size:13.5px; font-weight:500; cursor:pointer; border-bottom:2px solid transparent; position:relative; }
+  .ct-tab.active{ color:var(--text); border-bottom-color:var(--accent); }
+  .ct-tab .badge{ background:var(--requested); color:#fff; font-size:10px; padding:1px 6px; border-radius:10px; margin-left:6px; font-family:'IBM Plex Mono',monospace; }
+
+  .ct-stats{ display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:22px; }
+  .ct-stat{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; position:relative; overflow:hidden; }
+  .ct-stat::before{ content:''; position:absolute; left:0;top:0;bottom:0; width:3px; background:var(--dot,var(--accent)); }
+  .ct-stat .num{ font-family:'Fraunces',serif; font-size:26px; font-weight:600; }
+  .ct-stat .lbl{ color:var(--text-dim); font-size:11.5px; margin-top:2px; }
+  .ct-toolbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:12px; flex-wrap:wrap; }
+  .ct-search{ background:var(--surface-2); border:1px solid var(--border); border-radius:7px; padding:7px 12px; color:var(--text); font-size:13px; width:220px; }
+  .ct-search::placeholder{color:var(--text-faint);}
+  .ct-select{ background:var(--surface-2); border:1px solid var(--border); border-radius:7px; padding:7px 10px; color:var(--text); font-size:13px; }
+  .ct-legend{ display:flex; gap:16px; font-size:11.5px; color:var(--text-dim); align-items:center; flex-wrap:wrap; }
+  .ct-legend span{display:flex;align-items:center;gap:6px;}
+  .ct-legend .dot{width:9px;height:9px;border-radius:2px;display:inline-block;}
+  .ct-calendar-wrap{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:auto; max-width:100%; }
+  .ct-grid-row{ display:grid; align-items:stretch; position:relative; }
+  .ct-head-row{ position:sticky; top:0; z-index:3; background:var(--surface-2); border-bottom:1px solid var(--border); }
+  .ct-day-cell{ border-right:1px solid var(--border); text-align:center; padding:8px 0 6px; font-family:'IBM Plex Mono',monospace; }
+  .ct-day-cell .dow{ display:block; font-size:9px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.5px; }
+  .ct-day-cell .num{ font-size:13px; color:var(--text-dim); }
+  .ct-day-cell.weekend{background:#1E2531;}
+  .ct-day-cell.today{background:rgba(201,162,39,0.14);}
+  .ct-day-cell.today .num{color:var(--accent-light);font-weight:600;}
+  .ct-corner{ position:sticky;left:0;z-index:4; background:var(--surface-2); border-right:1px solid var(--border); display:flex;align-items:center;padding:0 14px; font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px; }
+  .ct-unit-row{ border-bottom:1px solid var(--border); min-height:56px; }
+  .ct-unit-row:last-child{border-bottom:none;}
+  .ct-unit-label{ position:sticky;left:0;z-index:2; background:var(--surface); border-right:1px solid var(--border); display:flex;align-items:center;gap:10px; padding:0 14px; }
+  .ct-key-tag{ width:30px;height:30px; border-radius:7px 7px 3px 3px; background:var(--surface-2); border:1px solid var(--border); position:relative; flex-shrink:0; display:flex;align-items:flex-end;justify-content:center; padding-bottom:2px; overflow:hidden; }
+  .ct-key-tag img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;}
+  .ct-key-tag::after{ content:''; position:absolute; top:4px;left:50%; transform:translateX(-50%); width:7px;height:7px; border-radius:50%; background:var(--bg); border:1px solid var(--border); z-index:1;}
+  .ct-key-tag .code{ font-size:8px; font-family:'IBM Plex Mono',monospace; color:var(--text-dim); position:relative; z-index:1;}
+  .ct-unit-name{ font-weight:600; font-size:13px; }
+  .ct-unit-edit{ margin-left:auto; background:none;border:none; color:var(--text-faint); cursor:pointer; font-size:13px; opacity:0; transition:opacity .15s; }
+  .ct-unit-label:hover .ct-unit-edit{opacity:1;}
+  .ct-day-slot{ border-right:1px solid var(--border); cursor:pointer; transition:background .1s; }
+  .ct-day-slot:hover{background:#212938;}
+  .ct-day-slot.weekend{background:rgba(30,37,49,0.5);}
+  .ct-day-slot.today{background:rgba(201,162,39,0.06);}
+  .ct-booking{
+    position:relative; grid-row:1; top:8px; height:calc(100% - 16px);
+    border-radius:6px 3px 3px 6px; display:flex; align-items:center; padding:0 10px;
+    font-size:12px; font-weight:500; color:#0F1115; cursor:pointer; overflow:hidden;
+    white-space:nowrap; z-index:1; box-shadow:0 1px 3px rgba(0,0,0,0.3);
+  }
+  .ct-empty{ padding:60px 20px; text-align:center; color:var(--text-dim); }
+  .ct-empty .big{ font-family:'Fraunces',serif; font-size:18px; color:var(--text); margin-bottom:6px; }
+
+  /* Guests table */
+  .ct-table-wrap{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:auto; }
+  table.ct-table{ width:100%; border-collapse:collapse; font-size:13px; }
+  table.ct-table th{ text-align:left; padding:10px 14px; font-size:10.5px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-faint); border-bottom:1px solid var(--border); background:var(--surface-2); position:sticky; top:0; }
+  table.ct-table td{ padding:10px 14px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  table.ct-table tr:last-child td{border-bottom:none;}
+  table.ct-table tr:hover td{background:#1E2531;}
+  .ct-status-pill{ display:inline-block; font-family:'IBM Plex Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; padding:3px 9px; border-radius:20px; color:#0F1115; font-weight:600; }
+  .ct-row-actions{ display:flex; gap:6px; flex-wrap:wrap; }
+  .ct-checked-time{ color:var(--text-dim); font-size:11.5px; font-family:'IBM Plex Mono',monospace; }
+
+  .ct-overlay{ position:fixed;inset:0; background:rgba(8,10,14,0.6); display:flex;align-items:center;justify-content:center; z-index:50; backdrop-filter:blur(2px); padding:20px; }
+  .ct-modal{ background:var(--surface); border:1px solid var(--border); border-radius:14px; width:400px; max-width:100%; padding:22px; max-height:88vh; overflow:auto; }
+  .ct-modal h3{ font-family:'Fraunces',serif; font-size:19px; margin:0 0 4px; font-weight:600; }
+  .ct-modal .status-pill{ display:inline-block; font-family:'IBM Plex Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; padding:2px 8px; border-radius:20px; margin-bottom:6px; }
+  .ct-checkedinfo{ font-size:11.5px; color:var(--text-dim); margin-bottom:14px; font-family:'IBM Plex Mono',monospace; }
+  .ct-field{margin-bottom:12px;}
+  .ct-field label{ display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:5px; }
+  .ct-field input,.ct-field select,.ct-field textarea{ width:100%; background:var(--surface-2); border:1px solid var(--border); color:var(--text); border-radius:7px; padding:8px 10px; font-family:'Inter',sans-serif; font-size:13px; }
+  .ct-field textarea{resize:vertical;min-height:50px;}
+  .ct-row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .ct-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+  .ct-modal-actions{ display:flex; gap:8px; margin-top:18px; flex-wrap:wrap; }
+  .ct-modal-actions .ct-btn{flex:1;}
+  .ct-toast{ position:fixed;bottom:20px;left:50%;transform:translateX(-50%); background:var(--surface-2); border:1px solid var(--border); padding:9px 16px; border-radius:8px; font-size:12.5px; z-index:60; opacity:0; transition:opacity .25s; pointer-events:none; }
+  .ct-toast.show{opacity:1;}
+  .ct-sync{ font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--text-faint); display:flex;align-items:center;gap:5px; }
+  .ct-sync .live-dot{ width:6px;height:6px;border-radius:50%; background:#4CAF7D; animation:pulse 2s infinite; }
+  @keyframes pulse{ 0%{box-shadow:0 0 0 0 rgba(76,175,125,0.5);} 70%{box-shadow:0 0 0 6px rgba(76,175,125,0);} 100%{box-shadow:0 0 0 0 rgba(76,175,125,0);} }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-card">
+    <h1>The Ledger</h1>
+    <div class="sub">Sign in to manage bookings</div>
+    <div class="login-error" id="login-error"></div>
+    <div class="login-field"><label>Email</label><input type="email" id="login-email" autocomplete="username"></div>
+    <div class="login-field"><label>Password</label><input type="password" id="login-password" autocomplete="current-password"></div>
+    <button class="ct-btn accent" id="login-btn" style="width:100%;padding:10px;">Sign in</button>
+    <div style="text-align:center;margin-top:16px;">
+      <a href="index.html" style="color:var(--accent-light);font-size:12.5px;text-decoration:none;">← Back to booking page</a>
+    </div>
+  </div>
+</div>
+
+<div id="ct-root">
+  <div class="ct-header">
+    <div>
+      <div class="ct-title">The Ledger <span class="sub">unit occupancy board</span></div>
+      <div class="ct-sync" id="ct-sync" style="margin-top:4px;"><span class="live-dot"></span> live — <span id="ct-user-email"></span></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <div class="ct-month-nav" id="ct-month-nav-wrap">
+        <button class="ct-btn icon" id="ct-prev">‹</button>
+        <span id="ct-month-label" style="min-width:130px;text-align:center;"></span>
+        <button class="ct-btn icon" id="ct-next">›</button>
+        <button class="ct-btn" id="ct-today">Today</button>
+      </div>
+      <button class="ct-btn accent" id="ct-add-booking">+ New booking</button>
+      <button class="ct-btn" id="ct-logout">Log out</button>
+    </div>
+  </div>
+
+  <div class="ct-stats" id="ct-stats"></div>
+
+  <div class="ct-tabs">
+    <button class="ct-tab active" data-tab="calendar" id="tab-calendar">Calendar</button>
+    <button class="ct-tab" data-tab="guests" id="tab-guests">Guests<span class="badge" id="requested-badge" style="display:none;">0</span></button>
+  </div>
+
+  <div id="view-calendar">
+    <div class="ct-toolbar">
+      <input class="ct-search" id="ct-search" placeholder="Search guest name…">
+      <div class="ct-legend">
+        <span><i class="dot" style="background:var(--upcoming)"></i>Upcoming</span>
+        <span><i class="dot" style="background:var(--current)"></i>Checked in</span>
+        <span><i class="dot" style="background:var(--checkout)"></i>Checking out today</span>
+        <span><i class="dot" style="background:var(--past)"></i>Checked out</span>
+        <button class="ct-btn small" id="ct-add-unit">+ Unit</button>
+      </div>
+    </div>
+    <div class="ct-calendar-wrap" id="ct-calendar"></div>
+  </div>
+
+  <div id="view-guests" style="display:none;">
+    <div class="ct-toolbar">
+      <input class="ct-search" id="ct-guest-search" placeholder="Search guest name…">
+      <select class="ct-select" id="ct-guest-filter">
+        <option value="all">All statuses</option>
+        <option value="requested">Requested</option>
+        <option value="upcoming">Upcoming</option>
+        <option value="checked-in">Checked in</option>
+        <option value="checked-out">Checked out</option>
+      </select>
+    </div>
+    <div class="ct-table-wrap">
+      <table class="ct-table" id="ct-guests-table">
+        <thead><tr>
+          <th>Guest</th><th>Unit</th><th># Guests</th><th>Check-in</th><th>Check-out</th>
+          <th>Phone</th><th>Status</th><th>Checked in at</th><th></th>
+        </tr></thead>
+        <tbody id="ct-guests-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="ct-toast" class="ct-toast"></div>
+
+<script>
+// ======================================================================
+const SUPABASE_URL = 'https://tpywafeapcskxwubskty.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRweXdhZmVhcGNza3h3dWJza3R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU2NzE2NTAsImV4cCI6MjEwMTI0NzY1MH0.KwK8uwOSPeJLXEcpWJlIizoa24mZjQY0yDCvo8wO_vA';
+// ======================================================================
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+(function(){
+  let units = [];
+  let bookings = [];
+  let currentDate = new Date();
+  let searchTerm = '';
+  let guestSearchTerm = '';
+  let guestFilter = 'all';
+  let activeTab = 'calendar';
+
+  const DAY_W = 42;
+  const LABEL_W = 190;
+  const todayStr = () => fmtDate(new Date());
+
+  function fmtDate(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function parseDate(s){ const [y,m,d] = s.split('-').map(Number); return new Date(y,m-1,d); }
+  function escapeHtml(s){ const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+  function fmtTime(t){ if(!t) return ''; const [h,m] = t.split(':'); const hh = ((+h+11)%12)+1; return `${hh}:${m} ${+h<12?'AM':'PM'}`; }
+  function fmtTimestamp(ts){ if(!ts) return '—'; const d = new Date(ts); return d.toLocaleDateString('default',{month:'short',day:'numeric'})+' '+d.toLocaleTimeString('default',{hour:'numeric',minute:'2-digit'}); }
+  function showToast(msg){ const t = document.getElementById('ct-toast'); t.textContent = msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2200); }
+
+  function fromDbBooking(r){
+    return { id:r.id, unitId:r.unit_id, guest:r.guest, checkIn:r.check_in, checkOut:r.check_out,
+      checkInTime:r.check_in_time, guestsCount:r.guests_count||1,
+      phone:r.phone, notes:r.notes, status:r.status,
+      checkedInAt:r.checked_in_at, checkedOutAt:r.checked_out_at };
+  }
+  function toDbBooking(b){
+    return { unit_id:b.unitId, guest:b.guest, check_in:b.checkIn, check_out:b.checkOut,
+      check_in_time:b.checkInTime||null, guests_count:b.guestsCount||1,
+      phone:b.phone||null, notes:b.notes||null, status:b.status };
+  }
+
+  async function checkSession(){
+    const { data:{ session } } = await sb.auth.getSession();
+    if(session){ onLoggedIn(session); } else { showLogin(); }
+  }
+  function showLogin(){ document.getElementById('login-screen').style.display = 'flex'; document.getElementById('ct-root').style.display = 'none'; }
+  function onLoggedIn(session){
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('ct-root').style.display = 'block';
+    document.getElementById('ct-user-email').textContent = session.user.email;
+    loadAll();
+    subscribeRealtime();
+  }
+  document.getElementById('login-btn').addEventListener('click', doLogin);
+  document.getElementById('login-password').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+  async function doLogin(){
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errEl = document.getElementById('login-error'); errEl.textContent = '';
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if(error){ errEl.textContent = error.message; return; }
+    onLoggedIn(data.session);
+  }
+  document.getElementById('ct-logout').addEventListener('click', async ()=>{ await sb.auth.signOut(); location.reload(); });
+
+  async function loadAll(){
+    const { data: u, error: uErr } = await sb.from('units').select('*').order('created_at');
+    const { data: b, error: bErr } = await sb.from('bookings').select('*');
+    if(uErr || bErr){ showToast('Could not load data'); console.error(uErr, bErr); return; }
+    units = u || [];
+    bookings = (b||[]).map(fromDbBooking);
+    render();
+  }
+  function subscribeRealtime(){
+    sb.channel('ledger-changes')
+      .on('postgres_changes', { event:'*', schema:'public', table:'units' }, loadAll)
+      .on('postgres_changes', { event:'*', schema:'public', table:'bookings' }, loadAll)
+      .subscribe();
+  }
+
+  function bookingStatus(bk){
+    const t = todayStr();
+    if(bk.status === 'checked-out') return 'past';
+    if(bk.status === 'requested') return 'requested';
+    if(bk.status === 'checked-in'){ return bk.checkOut === t ? 'checkout-today' : 'current'; }
+    return 'upcoming';
+  }
+  function statusColorVar(s){ return {upcoming:'var(--upcoming)',current:'var(--current)','checkout-today':'var(--checkout)',past:'var(--past)',requested:'var(--requested)'}[s]; }
+  function statusLabel(s){ return {upcoming:'Upcoming',current:'Checked in','checkout-today':'Checking out today',past:'Checked out',requested:'Requested'}[s]; }
+
+  // ---- tabs ----
+  document.getElementById('tab-calendar').addEventListener('click', ()=>switchTab('calendar'));
+  document.getElementById('tab-guests').addEventListener('click', ()=>switchTab('guests'));
+  function switchTab(tab){
+    activeTab = tab;
+    document.getElementById('tab-calendar').classList.toggle('active', tab==='calendar');
+    document.getElementById('tab-guests').classList.toggle('active', tab==='guests');
+    document.getElementById('view-calendar').style.display = tab==='calendar' ? 'block' : 'none';
+    document.getElementById('view-guests').style.display = tab==='guests' ? 'block' : 'none';
+    document.getElementById('ct-month-nav-wrap').style.visibility = tab==='calendar' ? 'visible' : 'hidden';
+    render();
+  }
+
+  function computeStats(){
+    const t = todayStr();
+    const checkedIn = bookings.filter(b=>b.status==='checked-in').length;
+    const inToday = bookings.filter(b=>b.checkIn===t && b.status==='upcoming').length;
+    const outToday = bookings.filter(b=>b.checkOut===t && b.status==='checked-in').length;
+    const occupiedUnitIds = new Set(bookings.filter(b=>b.status==='checked-in').map(b=>b.unitId));
+    const vacant = units.length - occupiedUnitIds.size;
+    const requested = bookings.filter(b=>b.status==='requested').length;
+    return {checkedIn, inToday, outToday, vacant, requested};
+  }
+
+  function renderStats(){
+    const s = computeStats();
+    document.getElementById('ct-stats').innerHTML = `
+      <div class="ct-stat" style="--dot:var(--current)"><div class="num mono">${s.checkedIn}</div><div class="lbl">Guests checked in</div></div>
+      <div class="ct-stat" style="--dot:var(--upcoming)"><div class="num mono">${s.inToday}</div><div class="lbl">Check-ins today</div></div>
+      <div class="ct-stat" style="--dot:var(--checkout)"><div class="num mono">${s.outToday}</div><div class="lbl">Check-outs today</div></div>
+      <div class="ct-stat" style="--dot:#4CAF7D"><div class="num mono">${s.vacant}</div><div class="lbl">Vacant units</div></div>
+      <div class="ct-stat" style="--dot:var(--requested)"><div class="num mono">${s.requested}</div><div class="lbl">Pending requests</div></div>
+    `;
+    const badge = document.getElementById('requested-badge');
+    if(s.requested > 0){ badge.style.display='inline-block'; badge.textContent = s.requested; }
+    else { badge.style.display='none'; }
+  }
+
+  function renderCalendar(){
+    const wrap = document.getElementById('ct-calendar');
+    const year = currentDate.getFullYear(), month = currentDate.getMonth();
+    const daysInMonth = new Date(year, month+1, 0).getDate();
+    const monthStart = new Date(year, month, 1);
+    const monthEnd = new Date(year, month, daysInMonth);
+    document.getElementById('ct-month-label').textContent = currentDate.toLocaleString('default',{month:'long', year:'numeric'});
+
+    if(units.length === 0){
+      wrap.innerHTML = `<div class="ct-empty"><div class="big">No units yet</div>Add your first unit to start tracking bookings.</div>`;
+      return;
+    }
+
+    const cols = `${LABEL_W}px repeat(${daysInMonth}, ${DAY_W}px)`;
+    let html = '';
+    html += `<div class="ct-grid-row ct-head-row" style="grid-template-columns:${cols};"><div class="ct-corner">Unit</div>`;
+    for(let d=1; d<=daysInMonth; d++){
+      const date = new Date(year, month, d);
+      const dow = date.toLocaleString('default',{weekday:'short'})[0];
+      const isWeekend = date.getDay()===0 || date.getDay()===6;
+      const isToday = fmtDate(date) === todayStr();
+      html += `<div class="ct-day-cell ${isWeekend?'weekend':''} ${isToday?'today':''}"><span class="dow">${dow}</span><span class="num">${d}</span></div>`;
+    }
+    html += `</div>`;
+
+    const filtered = searchTerm ? bookings.filter(b => b.guest.toLowerCase().includes(searchTerm.toLowerCase())) : bookings;
+    const visibleBookings = filtered.filter(b => b.status !== 'requested');
+
+    units.forEach(unit=>{
+      html += `<div class="ct-grid-row ct-unit-row" style="grid-template-columns:${cols};" data-unit="${unit.id}">`;
+      const photo = (unit.photo_urls && unit.photo_urls[0]) ? `<img src="${escapeHtml(unit.photo_urls[0])}" onerror="this.style.display='none'">` : '';
+      html += `<div class="ct-unit-label">
+        <div class="ct-key-tag">${photo}<span class="code">${unit.name.replace(/[^0-9]/g,'').slice(-3) || '—'}</span></div>
+        <span class="ct-unit-name">${escapeHtml(unit.name)}</span>
+        <button class="ct-unit-edit" data-edit-unit="${unit.id}" title="Edit unit">✎</button>
+      </div>`;
+      for(let d=1; d<=daysInMonth; d++){
+        const date = new Date(year, month, d);
+        const isWeekend = date.getDay()===0 || date.getDay()===6;
+        const isToday = fmtDate(date) === todayStr();
+        html += `<div class="ct-day-slot ${isWeekend?'weekend':''} ${isToday?'today':''}" data-day="${fmtDate(date)}" data-unit="${unit.id}"></div>`;
+      }
+      html += `</div>`;
+    });
+
+    wrap.innerHTML = html;
+
+    units.forEach((unit, rowIdx)=>{
+      const rowEl = wrap.querySelectorAll('.ct-unit-row')[rowIdx];
+      rowEl.style.display = 'grid';
+      rowEl.style.gridTemplateColumns = cols;
+      const unitBookings = visibleBookings.filter(b=>b.unitId===unit.id);
+      unitBookings.forEach(bk=>{
+        const ci = parseDate(bk.checkIn), co = parseDate(bk.checkOut);
+        if(co < monthStart || ci > monthEnd) return;
+        const startDay = ci < monthStart ? 1 : ci.getDate();
+        const endDay = co > monthEnd ? daysInMonth : co.getDate();
+        const status = bookingStatus(bk);
+        const div = document.createElement('div');
+        div.className = `ct-booking`;
+        div.style.gridColumnStart = String(startDay + 1);
+        div.style.gridColumnEnd = String(endDay + 2);
+        div.style.background = statusColorVar(status);
+        let title = `${bk.guest} — ${bk.guestsCount} guest${bk.guestsCount>1?'s':''}`;
+        if(bk.checkInTime) title += `, arriving ${fmtTime(bk.checkInTime)}`;
+        if(bk.checkedInAt) title += ` — checked in ${fmtTimestamp(bk.checkedInAt)}`;
+        div.title = title;
+        div.innerHTML = `<span class="guest">${escapeHtml(bk.guest)}</span>`;
+        div.addEventListener('click', (e)=>{ e.stopPropagation(); openBookingModal(bk.id); });
+        rowEl.appendChild(div);
+      });
+    });
+
+    wrap.querySelectorAll('.ct-day-slot').forEach(slot=>{
+      slot.addEventListener('click', ()=> openBookingModal(null, slot.dataset.unit, slot.dataset.day));
+    });
+    wrap.querySelectorAll('[data-edit-unit]').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{ e.stopPropagation(); openUnitModal(units.find(u=>u.id===btn.dataset.editUnit)); });
+    });
+  }
+
+  function renderGuests(){
+    const tbody = document.getElementById('ct-guests-tbody');
+    let rows = bookings.slice().sort((a,b)=> (b.checkIn||'').localeCompare(a.checkIn||''));
+    if(guestFilter !== 'all') rows = rows.filter(b=>b.status===guestFilter);
+    if(guestSearchTerm) rows = rows.filter(b=>b.guest.toLowerCase().includes(guestSearchTerm.toLowerCase()));
+
+    if(rows.length === 0){
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-dim);">No guests match this view.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = rows.map(bk=>{
+      const unit = units.find(u=>u.id===bk.unitId);
+      const status = bookingStatus(bk);
+      let actions = `<button class="ct-btn small" data-open-booking="${bk.id}">View</button>`;
+      if(bk.status === 'requested'){
+        actions = `<button class="ct-btn small accent" data-approve="${bk.id}">Approve</button>
+                   <button class="ct-btn small danger" data-decline="${bk.id}">Decline</button>` + actions;
+      } else if(bk.status === 'upcoming'){
+        actions = `<button class="ct-btn small" data-checkin="${bk.id}">Check in</button>` + actions;
+      } else if(bk.status === 'checked-in'){
+        actions = `<button class="ct-btn small" data-checkout="${bk.id}">Check out</button>` + actions;
+      }
+      return `<tr>
+        <td>${escapeHtml(bk.guest)}</td>
+        <td>${unit ? escapeHtml(unit.name) : '—'}</td>
+        <td>${bk.guestsCount}</td>
+        <td>${bk.checkIn}${bk.checkInTime ? ' · '+fmtTime(bk.checkInTime) : ''}</td>
+        <td>${bk.checkOut}</td>
+        <td>${bk.phone ? escapeHtml(bk.phone) : '—'}</td>
+        <td><span class="ct-status-pill" style="background:${statusColorVar(status)}">${statusLabel(status)}</span></td>
+        <td class="ct-checked-time">${fmtTimestamp(bk.checkedInAt)}</td>
+        <td><div class="ct-row-actions">${actions}</div></td>
+      </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('[data-open-booking]').forEach(b=>b.addEventListener('click', ()=>openBookingModal(b.dataset.openBooking)));
+    tbody.querySelectorAll('[data-approve]').forEach(b=>b.addEventListener('click', ()=>approveBooking(b.dataset.approve)));
+    tbody.querySelectorAll('[data-decline]').forEach(b=>b.addEventListener('click', ()=>declineBooking(b.dataset.decline)));
+    tbody.querySelectorAll('[data-checkin]').forEach(b=>b.addEventListener('click', ()=>doCheckIn(b.dataset.checkin)));
+    tbody.querySelectorAll('[data-checkout]').forEach(b=>b.addEventListener('click', ()=>doCheckOut(b.dataset.checkout)));
+  }
+
+  async function approveBooking(id){
+    const { error } = await sb.from('bookings').update({status:'upcoming'}).eq('id', id);
+    if(error){ showToast('Failed to approve'); return; }
+    loadAll(); showToast('Booking approved');
+  }
+  async function declineBooking(id){
+    if(!confirm('Decline and remove this request?')) return;
+    const { error } = await sb.from('bookings').delete().eq('id', id);
+    if(error){ showToast('Failed'); return; }
+    loadAll(); showToast('Request declined');
+  }
+  async function doCheckIn(id){
+    const { error } = await sb.from('bookings').update({status:'checked-in', checked_in_at: new Date().toISOString()}).eq('id', id);
+    if(error){ showToast('Failed'); return; }
+    loadAll(); showToast('Checked in');
+  }
+  async function doCheckOut(id){
+    const { error } = await sb.from('bookings').update({status:'checked-out', checked_out_at: new Date().toISOString()}).eq('id', id);
+    if(error){ showToast('Failed'); return; }
+    loadAll(); showToast('Checked out');
+  }
+
+  function render(){
+    renderStats();
+    if(activeTab === 'calendar') renderCalendar(); else renderGuests();
+  }
+
+  // ---- unit modal (add/edit incl. photos) ----
+  function openUnitModal(unit){
+    const overlay = document.createElement('div');
+    overlay.className = 'ct-overlay';
+    const photos = (unit && unit.photo_urls) ? unit.photo_urls : ['','',''];
+    while(photos.length < 3) photos.push('');
+    overlay.innerHTML = `
+      <div class="ct-modal">
+        <h3>${unit ? 'Edit unit' : 'New unit'}</h3>
+        <div class="ct-field"><label>Unit name</label><input id="um-name" value="${unit ? escapeHtml(unit.name) : ''}" placeholder="e.g. Unit 401"></div>
+        <div class="ct-field"><label>Photo URL 1</label><input id="um-photo1" value="${escapeHtml(photos[0]||'')}" placeholder="https://…"></div>
+        <div class="ct-field"><label>Photo URL 2 (optional)</label><input id="um-photo2" value="${escapeHtml(photos[1]||'')}" placeholder="https://…"></div>
+        <div class="ct-field"><label>Photo URL 3 (optional)</label><input id="um-photo3" value="${escapeHtml(photos[2]||'')}" placeholder="https://…"></div>
+        <div class="ct-modal-actions" id="um-actions"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) overlay.remove(); });
+    const actions = overlay.querySelector('#um-actions');
+
+    actions.appendChild(mkBtn('Save', 'ct-btn accent', async ()=>{
+      const name = overlay.querySelector('#um-name').value.trim();
+      if(!name){ showToast('Unit name is required'); return; }
+      const photo_urls = [overlay.querySelector('#um-photo1').value.trim(), overlay.querySelector('#um-photo2').value.trim(), overlay.querySelector('#um-photo3').value.trim()].filter(Boolean);
+      let error;
+      if(unit){ ({ error } = await sb.from('units').update({ name, photo_urls }).eq('id', unit.id)); }
+      else { ({ error } = await sb.from('units').insert({ name, photo_urls })); }
+      if(error){ showToast('Save failed'); console.error(error); return; }
+      overlay.remove(); loadAll(); showToast('Unit saved');
+    }));
+    if(unit){
+      actions.appendChild(mkBtn('Delete unit', 'ct-btn danger', async ()=>{
+        if(bookings.some(b=>b.unitId===unit.id)){ showToast("Remove that unit's bookings first"); return; }
+        if(!confirm('Delete this unit?')) return;
+        const { error } = await sb.from('units').delete().eq('id', unit.id);
+        if(error){ showToast('Could not remove unit'); return; }
+        overlay.remove(); loadAll();
+      }));
+    }
+    actions.appendChild(mkBtn('Cancel', 'ct-btn', ()=>overlay.remove()));
+  }
+  document.getElementById('ct-add-unit').addEventListener('click', ()=> openUnitModal(null));
+
+  // ---- booking modal ----
+  function openBookingModal(bookingId, unitId, day){
+    const existing = bookingId ? bookings.find(b=>b.id===bookingId) : null;
+    const overlay = document.createElement('div');
+    overlay.className = 'ct-overlay';
+    const status = existing ? bookingStatus(existing) : null;
+
+    overlay.innerHTML = `
+      <div class="ct-modal">
+        <h3>${existing ? 'Booking details' : 'New booking'}</h3>
+        ${existing ? `<div><span class="status-pill" style="background:${statusColorVar(status)};color:#1A1608;">${statusLabel(status)}</span></div>` : ''}
+        ${existing && existing.checkedInAt ? `<div class="ct-checkedinfo">Checked in: ${fmtTimestamp(existing.checkedInAt)}</div>` : (existing ? '<div style="margin-bottom:14px;"></div>' : '')}
+        <div class="ct-field"><label>Guest name</label>
+          <input id="mf-guest" value="${existing ? escapeHtml(existing.guest) : ''}" placeholder="e.g. Maria Santos"></div>
+        <div class="ct-field"><label>Unit</label>
+          <select id="mf-unit">${units.map(u=>`<option value="${u.id}" ${((existing?existing.unitId:unitId)===u.id)?'selected':''}>${escapeHtml(u.name)}</option>`).join('')}</select></div>
+        <div class="ct-row3">
+          <div class="ct-field"><label>Check-in date</label><input type="date" id="mf-in" value="${existing ? existing.checkIn : (day || todayStr())}"></div>
+          <div class="ct-field"><label>Check-in time</label><input type="time" id="mf-intime" value="${existing && existing.checkInTime ? existing.checkInTime.slice(0,5) : ''}"></div>
+          <div class="ct-field"><label>Check-out date</label><input type="date" id="mf-out" value="${existing ? existing.checkOut : ''}"></div>
+        </div>
+        <div class="ct-row2">
+          <div class="ct-field"><label># of guests</label><input type="number" min="1" id="mf-guests" value="${existing ? existing.guestsCount : 1}"></div>
+          <div class="ct-field"><label>Phone (optional)</label><input id="mf-phone" value="${existing && existing.phone ? escapeHtml(existing.phone) : ''}" placeholder="+63 9xx xxx xxxx"></div>
+        </div>
+        <div class="ct-field"><label>Notes (optional)</label><textarea id="mf-notes" placeholder="Late arrival, parking, etc.">${existing && existing.notes ? escapeHtml(existing.notes) : ''}</textarea></div>
+        <div class="ct-modal-actions" id="mf-actions"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) overlay.remove(); });
+
+    const actions = overlay.querySelector('#mf-actions');
+    function collect(){
+      const guest = overlay.querySelector('#mf-guest').value.trim();
+      const uId = overlay.querySelector('#mf-unit').value;
+      const ci = overlay.querySelector('#mf-in').value;
+      const cit = overlay.querySelector('#mf-intime').value;
+      const co = overlay.querySelector('#mf-out').value;
+      const guestsCount = parseInt(overlay.querySelector('#mf-guests').value, 10) || 1;
+      const phone = overlay.querySelector('#mf-phone').value.trim();
+      const notes = overlay.querySelector('#mf-notes').value.trim();
+      if(!guest){ showToast('Guest name is required'); return null; }
+      if(!ci || !co){ showToast('Check-in and check-out dates are required'); return null; }
+      if(co <= ci){ showToast('Check-out must be after check-in'); return null; }
+      return {guest, unitId:uId, checkIn:ci, checkInTime: cit || null, checkOut:co, guestsCount, phone, notes};
+    }
+
+    actions.appendChild(mkBtn('Save', 'ct-btn accent', async ()=>{
+      const data = collect();
+      if(!data) return;
+      let error;
+      if(existing){ ({ error } = await sb.from('bookings').update(toDbBooking({...existing, ...data})).eq('id', existing.id)); }
+      else { ({ error } = await sb.from('bookings').insert(toDbBooking({...data, status:'upcoming'}))); }
+      if(error){ showToast('Save failed'); console.error(error); return; }
+      overlay.remove(); loadAll();
+      showToast(existing ? 'Booking updated' : 'Booking added');
+    }));
+
+    if(existing){
+      if(existing.status === 'requested'){
+        actions.appendChild(mkBtn('Approve', 'ct-btn accent', async ()=>{
+          const { error } = await sb.from('bookings').update({status:'upcoming'}).eq('id', existing.id);
+          if(error){ showToast('Failed'); return; }
+          overlay.remove(); loadAll(); showToast('Booking approved');
+        }));
+      }
+      if(existing.status === 'upcoming'){
+        actions.appendChild(mkBtn('Check in', 'ct-btn', async ()=>{
+          const { error } = await sb.from('bookings').update({status:'checked-in', checked_in_at: new Date().toISOString()}).eq('id', existing.id);
+          if(error){ showToast('Failed'); return; }
+          overlay.remove(); loadAll(); showToast(existing.guest+' checked in');
+        }));
+      }
+      if(existing.status === 'checked-in'){
+        actions.appendChild(mkBtn('Check out', 'ct-btn', async ()=>{
+          const { error } = await sb.from('bookings').update({status:'checked-out', checked_out_at: new Date().toISOString()}).eq('id', existing.id);
+          if(error){ showToast('Failed'); return; }
+          overlay.remove(); loadAll(); showToast(existing.guest+' checked out');
+        }));
+      }
+      actions.appendChild(mkBtn(existing.status === 'requested' ? 'Decline' : 'Delete', 'ct-btn danger', async ()=>{
+        if(!confirm(existing.status === 'requested' ? 'Decline this request?' : 'Delete this booking?')) return;
+        const { error } = await sb.from('bookings').delete().eq('id', existing.id);
+        if(error){ showToast('Failed'); return; }
+        overlay.remove(); loadAll(); showToast(existing.status === 'requested' ? 'Request declined' : 'Booking deleted');
+      }));
+    }
+    actions.appendChild(mkBtn('Cancel', 'ct-btn', ()=>overlay.remove()));
+  }
+
+  function mkBtn(label, cls, onClick){
+    const b = document.createElement('button');
+    b.className = cls; b.textContent = label;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  document.getElementById('ct-prev').addEventListener('click', ()=>{ currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth()-1, 1); renderCalendar(); });
+  document.getElementById('ct-next').addEventListener('click', ()=>{ currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth()+1, 1); renderCalendar(); });
+  document.getElementById('ct-today').addEventListener('click', ()=>{ currentDate = new Date(); renderCalendar(); });
+  document.getElementById('ct-add-booking').addEventListener('click', ()=> openBookingModal(null, units[0] && units[0].id, todayStr()));
+  document.getElementById('ct-search').addEventListener('input', (e)=>{ searchTerm = e.target.value; renderCalendar(); });
+  document.getElementById('ct-guest-search').addEventListener('input', (e)=>{ guestSearchTerm = e.target.value; renderGuests(); });
+  document.getElementById('ct-guest-filter').addEventListener('change', (e)=>{ guestFilter = e.target.value; renderGuests(); });
+
+  checkSession();
+})();
+</script>
+</body>
+</html>
