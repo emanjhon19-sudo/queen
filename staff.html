@@ -215,7 +215,7 @@
     <div class="ct-table-wrap">
       <table class="ct-table" id="ct-guests-table">
         <thead><tr>
-          <th>Guest</th><th>Unit</th><th># Guests</th><th>Check-in</th><th>Check-out</th>
+          <th>Booking #</th><th>Guest</th><th>Unit</th><th># Guests</th><th>Check-in</th><th>Check-out</th>
           <th>Email</th><th>Phone</th><th>Status</th><th>Paid</th><th>Checked in at</th><th></th>
         </tr></thead>
         <tbody id="ct-guests-tbody"></tbody>
@@ -275,11 +275,12 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
   });
 
   function fromDbBooking(r){
-    return { id:r.id, unitId:r.unit_id, guest:r.guest, email:r.email, checkIn:r.check_in, checkOut:r.check_out,
+    return { id:r.id, bookingNumber:r.booking_number, unitId:r.unit_id, guest:r.guest, email:r.email, checkIn:r.check_in, checkOut:r.check_out,
       checkInTime:r.check_in_time, guestsCount:r.guests_count||1,
       phone:r.phone, notes:r.notes, status:r.status, paymentStatus:r.payment_status||'unpaid',
       checkedInAt:r.checked_in_at, checkedOutAt:r.checked_out_at };
   }
+  function orderNumber(bk){ return bk.bookingNumber ? 'LDG-' + String(bk.bookingNumber).padStart(5,'0') : '—'; }
   function toDbBooking(b){
     return { unit_id:b.unitId, guest:b.guest, email:b.email||null, check_in:b.checkIn, check_out:b.checkOut,
       check_in_time:b.checkInTime||null, guests_count:b.guestsCount||1,
@@ -301,6 +302,7 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
     try{
       await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
         to_email: bk.email,
+        order_number: orderNumber(bk),
         guest_name: bk.guest,
         unit_name: unit ? unit.name : '',
         check_in: bk.checkIn,
@@ -500,7 +502,7 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
     if(guestSearchTerm) rows = rows.filter(b=>b.guest.toLowerCase().includes(guestSearchTerm.toLowerCase()));
 
     if(rows.length === 0){
-      tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:40px;color:var(--text-dim);">No guests match this view.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-dim);">No guests match this view.</td></tr>`;
       return;
     }
 
@@ -517,6 +519,7 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
         actions = `<button class="ct-btn small" data-checkout="${bk.id}">Check out</button>` + actions;
       }
       return `<tr>
+        <td class="mono">${orderNumber(bk)}</td>
         <td>${escapeHtml(bk.guest)}</td>
         <td>${unit ? escapeHtml(unit.name) : '—'}</td>
         <td>${bk.guestsCount}</td>
@@ -635,6 +638,7 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
     overlay.innerHTML = `
       <div class="ct-modal">
         <h3>${existing ? 'Booking details' : 'New booking'}</h3>
+        ${existing ? `<div style="color:var(--text-faint);font-size:12px;font-family:'IBM Plex Mono',monospace;margin-bottom:8px;">${orderNumber(existing)}</div>` : ''}
         ${existing ? `<div style="display:flex;gap:8px;align-items:center;"><span class="status-pill" style="background:${statusColorVar(status)};">${statusLabel(status)}</span><span class="paid-pill ${existing.paymentStatus==='paid'?'paid':'unpaid'}" id="mf-paid-toggle" style="cursor:pointer;">${existing.paymentStatus==='paid'?'Paid':'Unpaid'}</span></div>` : ''}
         ${existing && existing.checkedInAt ? `<div class="ct-checkedinfo">Checked in: ${fmtTimestamp(existing.checkedInAt)}</div>` : (existing ? '<div style="margin-bottom:14px;"></div>' : '')}
         <div class="ct-field"><label>Guest name</label>
