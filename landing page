@@ -629,10 +629,10 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   checkSession();
 })();
 </script>
+</body>
 <footer>
   <div class="footer-container">
-  <h3>Developed by ejpbdevcom</h3>
+    <h3> Developed by ejpbdevcom </h3>
   </div>
 </footer>
-</body>
 </html>
