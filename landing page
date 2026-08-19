@@ -630,4 +630,9 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 })();
 </script>
 </body>
+<footer>
+  <div class="footer-container">
+    <h3>Developed by ejpbdevcom</h3>
+  </div>
+</footer>
 </html>
