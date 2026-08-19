@@ -3,64 +3,112 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Book a Unit — The Ledger</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<script>(function(){var t=localStorage.getItem('theme')||(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);})();</script>
+<title>Book a Unit</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
+    --bg:#F5F6F3; --surface:#FFFFFF; --surface-2:#EFF1EC; --border:#E3E5DF;
+    --text:#1B1F1B; --text-dim:#6B7168; --text-faint:#9CA39A;
+    --accent:#0EA5A0; --accent-hover:#0C8B87; --accent-soft:#E3F5F3;
+    --coral:#F2704B; --blue:#3B82F6; --violet:#8B7FD1;
+    --radius:18px; --radius-sm:10px;
+    --shadow-sm:0 1px 2px rgba(20,25,20,.05);
+    --shadow-md:0 10px 30px rgba(20,25,20,.08);
+  }
+  [data-theme="dark"]{
     --bg:#12161D; --surface:#1A2029; --surface-2:#212836; --border:#2B3241;
     --text:#EDEAE2; --text-dim:#8B93A3; --text-faint:#5A6274;
-    --accent:#C9A227; --accent-light:#E8C468; --radius:12px;
+    --accent:#2DD4CB; --accent-hover:#5EE6DE; --accent-soft:#163B38;
+    --coral:#F2704B; --blue:#5B9BFF; --violet:#A99BE0;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.35);
+    --shadow-md:0 10px 30px rgba(0,0,0,.5);
   }
+  .theme-toggle{ background:var(--surface-2); border:1px solid var(--border); color:var(--text-dim); border-radius:999px; width:30px; height:30px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; font-size:14px; }
+  .theme-toggle:hover{ color:var(--text); }
+  .avail-btn{ font-size:12.5px; color:var(--accent); font-weight:600; background:none; border:none; cursor:pointer; padding:0; font-family:'Inter',sans-serif; }
+  .avail-cal{ background:var(--surface-2); border-radius:var(--radius-sm); padding:12px 14px; margin-bottom:16px; }
+  .avail-cal-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .avail-cal-head .lbl{ font-family:'Sora',sans-serif; font-weight:700; font-size:13px; }
+  .avail-cal-head button{ background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:14px; padding:2px 6px; }
+  .avail-cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+  .avail-day{ aspect-ratio:1; display:flex; align-items:center; justify-content:center; font-size:10.5px; border-radius:6px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace; }
+  .avail-day.blank{visibility:hidden;}
+  .avail-day.booked{ background:var(--coral); color:#fff; }
+  .avail-day.past{ opacity:0.35; }
+  .avail-day.today{ box-shadow:inset 0 0 0 1.5px var(--accent); }
+  .avail-legend{ display:flex; gap:14px; font-size:11px; color:var(--text-faint); margin-top:8px; }
+  .avail-legend span{ display:flex; align-items:center; gap:5px; }
+  .avail-legend .dot{ width:8px; height:8px; border-radius:3px; display:inline-block; }
+  .address-link{ color:var(--text-dim); text-decoration:none; }
+  .address-link:hover{ color:var(--accent); text-decoration:underline; }
   *{box-sizing:border-box;}
   html,body{margin:0;background:var(--bg);}
-  body{ color:var(--text); font-family:'Inter',sans-serif; font-size:14px; line-height:1.5; min-height:100vh; }
-  .wrap{ max-width:960px; margin:0 auto; padding:36px 20px 80px; }
-  .hero{ text-align:center; margin-bottom:36px; }
-  .hero h1{ font-family:'Fraunces',serif; font-size:32px; font-weight:600; margin:0 0 8px; }
-  .hero p{ color:var(--text-dim); font-size:14.5px; margin:0; }
-  .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:20px; }
-  .unit-card{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; cursor:pointer; transition:transform .15s, border-color .15s; }
-  .unit-card:hover{ transform:translateY(-2px); border-color:#394358; }
-  .unit-photo{ width:100%; height:170px; background:var(--surface-2); position:relative; overflow:hidden; }
+  body{ color:var(--text); font-family:'Inter',sans-serif; font-size:14.5px; line-height:1.5; min-height:100vh; }
+  .disp{font-family:'Sora',sans-serif;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .wrap{ max-width:980px; margin:0 auto; padding:20px 20px 90px; }
+
+  .topbar{ display:flex; justify-content:flex-end; align-items:center; gap:12px; padding:6px 0 18px; }
+  .topbar a{ color:var(--text-faint); font-size:12.5px; font-family:'IBM Plex Mono',monospace; text-decoration:none; }
+  .topbar a:hover{ color:var(--text-dim); }
+
+  .hero{ text-align:center; margin-bottom:38px; }
+  .hero h1{ font-weight:700; font-size:34px; margin:0 0 8px; letter-spacing:-0.5px; }
+  .hero p{ color:var(--text-dim); font-size:15px; margin:0; }
+
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(270px,1fr)); gap:22px; }
+  .unit-card{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; cursor:pointer; box-shadow:var(--shadow-sm); transition:transform .18s ease, box-shadow .18s ease; }
+  .unit-card:hover{ transform:translateY(-3px); box-shadow:var(--shadow-md); }
+  .unit-photo{ width:100%; height:180px; background:var(--surface-2); position:relative; overflow:hidden; }
   .unit-photo img{ width:100%; height:100%; object-fit:cover; display:block; }
-  .unit-photo .thumbs{ position:absolute; bottom:8px; right:8px; display:flex; gap:4px; }
-  .unit-photo .thumbs span{ width:6px;height:6px;border-radius:50%; background:rgba(255,255,255,0.5); }
-  .unit-photo-empty{ display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-faint); font-family:'Fraunces',serif; font-size:14px; }
+  .unit-photo-empty{ display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-faint); font-family:'Sora',sans-serif; font-weight:600; font-size:14px; }
+  .price-badge{ position:absolute; left:10px; bottom:10px; background:rgba(255,255,255,0.92); backdrop-filter:blur(4px); color:var(--text); font-family:'Sora',sans-serif; font-weight:700; font-size:13px; padding:5px 11px; border-radius:999px; box-shadow:var(--shadow-sm); }
+  .price-badge span{ color:var(--text-faint); font-weight:500; font-size:11px; font-family:'Inter',sans-serif; }
   .unit-body{ padding:14px 16px 16px; }
-  .unit-name{ font-family:'Fraunces',serif; font-weight:600; font-size:17px; margin-bottom:4px; }
-  .unit-cta{ font-size:12.5px; color:var(--accent-light); font-family:'IBM Plex Mono',monospace; }
+  .unit-name{ font-family:'Sora',sans-serif; font-weight:700; font-size:16.5px; margin-bottom:3px; }
+  .unit-address{ color:var(--text-dim); font-size:12.5px; margin-bottom:8px; display:flex; align-items:center; gap:4px; }
+  .unit-cta{ font-size:12.5px; color:var(--accent); font-weight:600; }
   .empty-state{ text-align:center; padding:60px 20px; color:var(--text-dim); }
 
-  .ct-overlay{ position:fixed;inset:0; background:rgba(8,10,14,0.65); display:flex;align-items:center;justify-content:center; z-index:50; backdrop-filter:blur(2px); padding:20px; overflow-y:auto; }
-  .ct-modal{ background:var(--surface); border:1px solid var(--border); border-radius:14px; width:440px; max-width:100%; padding:24px; max-height:90vh; overflow:auto; }
-  .ct-modal h3{ font-family:'Fraunces',serif; font-size:20px; margin:0 0 4px; font-weight:600; }
-  .ct-modal .sub{ color:var(--text-dim); font-size:13px; margin-bottom:18px; }
+  .ct-overlay{ position:fixed;inset:0; background:rgba(20,22,20,0.45); display:flex;align-items:center;justify-content:center; z-index:50; backdrop-filter:blur(3px); padding:20px; overflow-y:auto; }
+  .ct-modal{ position:relative; background:var(--surface); border:1px solid var(--border); border-radius:20px; width:460px; max-width:100%; padding:26px; max-height:90vh; overflow:auto; box-shadow:var(--shadow-md); }
+  .ct-modal h3{ font-family:'Sora',sans-serif; font-size:21px; margin:0 0 3px; font-weight:700; }
+  .ct-modal .sub{ color:var(--text-dim); font-size:13px; margin-bottom:6px; }
+  .modal-address{ color:var(--text-faint); font-size:12.5px; margin-bottom:16px; }
   .gallery{ display:flex; gap:6px; margin-bottom:16px; }
-  .gallery img{ width:100%; height:90px; object-fit:cover; border-radius:8px; border:1px solid var(--border); }
-  .ct-field{margin-bottom:12px;}
-  .ct-field label{ display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:5px; }
-  .ct-field input, .ct-field textarea{ width:100%; background:var(--surface-2); border:1px solid var(--border); color:var(--text); border-radius:7px; padding:9px 11px; font-family:'Inter',sans-serif; font-size:13.5px; }
-  .ct-field textarea{resize:vertical;min-height:50px;}
+  .gallery img{ width:100%; height:92px; object-fit:cover; border-radius:10px; border:1px solid var(--border); }
+  .ct-field{margin-bottom:13px;}
+  .ct-field label{ display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:5px; font-weight:500; }
+  .ct-field input, .ct-field textarea{ width:100%; background:var(--surface-2); border:1px solid var(--border); color:var(--text); border-radius:var(--radius-sm); padding:10px 12px; font-family:'Inter',sans-serif; font-size:13.5px; }
+  .ct-field input:focus, .ct-field textarea:focus{ outline:none; border-color:var(--accent); background:var(--surface); }
+  .ct-field textarea{resize:vertical;min-height:52px;}
   .ct-row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
   .ct-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
-  .ct-btn{ background:var(--surface-2); border:1px solid var(--border); color:var(--text); border-radius:7px; padding:9px 14px; cursor:pointer; font-family:'Inter',sans-serif; font-size:13.5px; font-weight:500; }
-  .ct-btn.accent{ background:var(--accent); color:#1A1608; border-color:var(--accent); font-weight:600; }
+  .total-box{ background:var(--accent-soft); border-radius:var(--radius-sm); padding:12px 14px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; }
+  .total-box .lbl{ font-size:12.5px; color:var(--text-dim); }
+  .total-box .amt{ font-family:'Sora',sans-serif; font-weight:700; font-size:17px; color:var(--accent-hover); }
+  .ct-btn{ background:var(--surface-2); border:1px solid var(--border); color:var(--text); border-radius:var(--radius-sm); padding:10px 16px; cursor:pointer; font-family:'Inter',sans-serif; font-size:13.5px; font-weight:600; transition:background .15s; }
+  .ct-btn:hover{ background:#E5E7E1; }
+  .ct-btn.accent{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .ct-btn.accent:hover{ background:var(--accent-hover); }
   .ct-modal-actions{ display:flex; gap:8px; margin-top:18px; }
   .ct-modal-actions .ct-btn{flex:1;}
-  .err{ color:#D9714E; font-size:12.5px; margin-bottom:10px; min-height:16px; }
-  .success{ text-align:center; padding:20px 4px; }
-  .success .big{ font-family:'Fraunces',serif; font-size:22px; margin-bottom:8px; }
+  .err{ color:var(--coral); font-size:12.5px; margin-bottom:10px; min-height:16px; }
+  .success{ text-align:center; padding:16px 4px; }
+  .success .big{ font-family:'Sora',sans-serif; font-weight:700; font-size:22px; margin-bottom:8px; }
   .success p{ color:var(--text-dim); font-size:13.5px; }
 </style>
 </head>
 <body>
   <div class="wrap">
-    <div style="text-align:right;margin-bottom:-10px;">
-      <a href="staff.html" style="color:var(--text-faint);font-size:12px;font-family:'IBM Plex Mono',monospace;text-decoration:none;">Staff login →</a>
+    <div class="topbar">
+      <button class="theme-toggle" id="theme-toggle" title="Toggle dark mode">🌙</button>
+      <a href="staff.html">Staff login →</a>
     </div>
     <div class="hero">
-      <h1>Find your stay</h1>
+      <h1 class="disp">Find your stay</h1>
       <p>Pick a unit below to request a booking — we'll confirm with you shortly.</p>
     </div>
     <div class="grid" id="units-grid"></div>
@@ -69,13 +117,26 @@
 <script>
 // ======================================================================
 const SUPABASE_URL = 'https://tpywafeapcskxwubskty.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRweXdhZmVhcGNza3h3dWJza3R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU2NzE2NTAsImV4cCI6MjEwMTI0NzY1MH0.KwK8uwOSPeJLXEcpWJlIizoa24mZjQY0yDCvo8wO_vA';
+const SUPABASE_ANON_KEY = 'sb_publishable_0-UDa5DPsZ5oyKqSDt-JaQ_6OGXKoTk';
 // ======================================================================
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 (function(){
   function escapeHtml(s){ const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
   function todayStr(){ const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function fmtPHP(n){ return '₱' + Number(n).toLocaleString('en-PH', {maximumFractionDigits:0}); }
+  function nightsBetween(a,b){ if(!a||!b) return 0; const d1=new Date(a), d2=new Date(b); const diff = Math.round((d2-d1)/86400000); return diff>0?diff:0; }
+  function mapsUrl(addr){ return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr); }
+
+  const themeBtn = document.getElementById('theme-toggle');
+  function applyThemeIcon(){ themeBtn.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '☀️' : '🌙'; }
+  applyThemeIcon();
+  themeBtn.addEventListener('click', ()=>{
+    const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    applyThemeIcon();
+  });
 
   async function loadUnits(){
     const { data, error } = await sb.from('units').select('*').order('created_at');
@@ -84,13 +145,15 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     if(!data || data.length === 0){ grid.innerHTML = `<div class="empty-state">No units available yet.</div>`; return; }
     grid.innerHTML = data.map(u=>{
       const photos = u.photo_urls || [];
+      const priceBadge = u.price_per_night ? `<div class="price-badge">${fmtPHP(u.price_per_night)}<span> /night</span></div>` : '';
       const photoHtml = photos[0]
-        ? `<img src="${escapeHtml(photos[0])}" onerror="this.parentElement.innerHTML='<div class=&quot;unit-photo-empty&quot;>${escapeHtml(u.name)}</div>'">${photos.length>1 ? `<div class="thumbs">${photos.map(()=>'<span></span>').join('')}</div>` : ''}`
-        : `<div class="unit-photo-empty">${escapeHtml(u.name)}</div>`;
+        ? `<img src="${escapeHtml(photos[0])}" onerror="this.parentElement.innerHTML='<div class=&quot;unit-photo-empty&quot;>${escapeHtml(u.name)}</div>'">${priceBadge}`
+        : `<div class="unit-photo-empty">${escapeHtml(u.name)}</div>${priceBadge}`;
       return `<div class="unit-card" data-unit='${JSON.stringify(u).replace(/'/g,"&apos;")}'>
         <div class="unit-photo">${photoHtml}</div>
         <div class="unit-body">
-          <div class="unit-name">${escapeHtml(u.name)}</div>
+          <div class="unit-name disp">${escapeHtml(u.name)}</div>
+          ${u.address ? `<div class="unit-address"><a class="address-link" href="${mapsUrl(u.address)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📍 ${escapeHtml(u.address)}</a></div>` : ''}
           <div class="unit-cta">Request to book →</div>
         </div>
       </div>`;
@@ -106,13 +169,20 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     overlay.className = 'ct-overlay';
     overlay.innerHTML = `
       <div class="ct-modal">
-        <h3>${escapeHtml(unit.name)}</h3>
-        <div class="sub">Tell us about your stay and we'll confirm availability.</div>
+        <h3 class="disp">${escapeHtml(unit.name)}</h3>
+        ${unit.address ? `<div class="modal-address"><a class="address-link" href="${mapsUrl(unit.address)}" target="_blank" rel="noopener">📍 ${escapeHtml(unit.address)}</a></div>` : `<div class="sub" style="margin-bottom:16px;"></div>`}
         ${photos.length ? `<div class="gallery">${photos.slice(0,3).map(p=>`<img src="${escapeHtml(p)}" onerror="this.style.display='none'">`).join('')}</div>` : ''}
+        <div class="avail-cal" id="avail-cal"></div>
         <div class="err" id="bf-err"></div>
+        <div style="position:absolute;left:-9999px;" aria-hidden="true">
+          <label>Leave this field blank</label><input type="text" id="bf-website" tabindex="-1" autocomplete="off">
+        </div>
         <div class="ct-field"><label>Your name</label><input id="bf-guest" placeholder="Full name"></div>
         <div class="ct-row2">
+          <div class="ct-field"><label>Email</label><input type="email" id="bf-email" placeholder="you@email.com"></div>
           <div class="ct-field"><label>Phone</label><input id="bf-phone" placeholder="+63 9xx xxx xxxx"></div>
+        </div>
+        <div class="ct-row2">
           <div class="ct-field"># of guests<input type="number" min="1" id="bf-guests" value="1"></div>
         </div>
         <div class="ct-row3">
@@ -120,6 +190,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
           <div class="ct-field"><label>Arrival time</label><input type="time" id="bf-intime"></div>
           <div class="ct-field"><label>Check-out date</label><input type="date" id="bf-out"></div>
         </div>
+        ${unit.price_per_night ? `<div class="total-box"><span class="lbl" id="bf-total-lbl">Select dates to see total</span><span class="amt mono" id="bf-total-amt"></span></div>` : ''}
         <div class="ct-field"><label>Notes (optional)</label><textarea id="bf-notes" placeholder="Anything we should know?"></textarea></div>
         <div class="ct-modal-actions">
           <button class="ct-btn" id="bf-cancel">Cancel</button>
@@ -129,8 +200,28 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     document.body.appendChild(overlay);
     overlay.addEventListener('click', (e)=>{ if(e.target===overlay) overlay.remove(); });
     overlay.querySelector('#bf-cancel').addEventListener('click', ()=>overlay.remove());
+
+    renderAvailCalendar(unit, overlay, new Date());
+
+    if(unit.price_per_night){
+      const updateTotal = ()=>{
+        const ci = overlay.querySelector('#bf-in').value;
+        const co = overlay.querySelector('#bf-out').value;
+        const n = nightsBetween(ci, co);
+        const lbl = overlay.querySelector('#bf-total-lbl');
+        const amt = overlay.querySelector('#bf-total-amt');
+        if(n > 0){ lbl.textContent = `${n} night${n>1?'s':''} × ${fmtPHP(unit.price_per_night)}`; amt.textContent = fmtPHP(n * unit.price_per_night); }
+        else { lbl.textContent = 'Select dates to see total'; amt.textContent = ''; }
+      };
+      overlay.querySelector('#bf-in').addEventListener('change', updateTotal);
+      overlay.querySelector('#bf-out').addEventListener('change', updateTotal);
+      updateTotal();
+    }
+
     overlay.querySelector('#bf-submit').addEventListener('click', async ()=>{
+      if(overlay.querySelector('#bf-website').value.trim()){ return; } // honeypot — bots fill this, real guests never see it
       const guest = overlay.querySelector('#bf-guest').value.trim();
+      const email = overlay.querySelector('#bf-email').value.trim();
       const phone = overlay.querySelector('#bf-phone').value.trim();
       const guestsCount = parseInt(overlay.querySelector('#bf-guests').value,10) || 1;
       const checkIn = overlay.querySelector('#bf-in').value;
@@ -139,11 +230,12 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       const notes = overlay.querySelector('#bf-notes').value.trim();
       const errEl = overlay.querySelector('#bf-err'); errEl.textContent = '';
       if(!guest){ errEl.textContent = 'Please enter your name.'; return; }
+      if(!email){ errEl.textContent = 'Please enter your email so we can confirm your booking.'; return; }
       if(!checkIn || !checkOut){ errEl.textContent = 'Please choose check-in and check-out dates.'; return; }
       if(checkOut <= checkIn){ errEl.textContent = 'Check-out must be after check-in.'; return; }
 
       const { error } = await sb.from('bookings').insert({
-        unit_id: unit.id, guest, phone: phone || null, guests_count: guestsCount,
+        unit_id: unit.id, guest, email, phone: phone || null, guests_count: guestsCount,
         check_in: checkIn, check_in_time: checkInTime || null, check_out: checkOut,
         notes: notes || null, status: 'requested'
       });
@@ -151,13 +243,48 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
       overlay.querySelector('.ct-modal').innerHTML = `
         <div class="success">
-          <div class="big">Request sent ✓</div>
+          <div class="big disp">Request sent ✓</div>
           <p>Thanks, ${escapeHtml(guest)}! We've received your request for ${escapeHtml(unit.name)}.
-          We'll reach out to confirm it shortly.</p>
+          We'll reach out to confirm it, and you'll get payment instructions (GCash/bank transfer) by email once it's approved.</p>
           <button class="ct-btn accent" id="bf-close" style="margin-top:10px;">Close</button>
         </div>`;
       overlay.querySelector('#bf-close').addEventListener('click', ()=>overlay.remove());
     });
+  }
+
+  async function renderAvailCalendar(unit, overlay, startDate){
+    const container = overlay.querySelector('#avail-cal');
+    container.innerHTML = `<div style="text-align:center;color:var(--text-faint);font-size:12px;padding:8px;">Loading availability…</div>`;
+    const { data, error } = await sb.from('public_availability').select('check_in,check_out').eq('unit_id', unit.id);
+    if(error){ container.innerHTML = ''; console.error(error); return; }
+    const ranges = (data||[]).map(r=>({ start: new Date(r.check_in), end: new Date(r.check_out) }));
+    let cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+
+    function isBooked(date){ return ranges.some(r => date >= r.start && date < r.end); }
+
+    function draw(){
+      const year = cursor.getFullYear(), month = cursor.getMonth();
+      const daysInMonth = new Date(year, month+1, 0).getDate();
+      const firstDow = new Date(year, month, 1).getDay();
+      const today = new Date(); today.setHours(0,0,0,0);
+      let html = `<div class="avail-cal-head"><button data-avail-prev type="button">‹</button><span class="lbl">${cursor.toLocaleString('default',{month:'long',year:'numeric'})}</span><button data-avail-next type="button">›</button></div>`;
+      html += `<div class="avail-cal-grid">`;
+      ['S','M','T','W','T','F','S'].forEach(d=> html += `<div class="avail-day" style="color:var(--text-faint);font-weight:700;">${d}</div>`);
+      for(let i=0;i<firstDow;i++) html += `<div class="avail-day blank"></div>`;
+      for(let d=1; d<=daysInMonth; d++){
+        const date = new Date(year, month, d);
+        const cls = ['avail-day'];
+        if(date < today) cls.push('past');
+        else if(isBooked(date)) cls.push('booked');
+        if(date.getTime() === today.getTime()) cls.push('today');
+        html += `<div class="${cls.join(' ')}">${d}</div>`;
+      }
+      html += `</div><div class="avail-legend"><span><i class="dot" style="background:var(--coral)"></i>Booked</span><span><i class="dot" style="background:var(--surface);box-shadow:inset 0 0 0 1px var(--border);"></i>Available</span></div>`;
+      container.innerHTML = html;
+      container.querySelector('[data-avail-prev]').addEventListener('click', ()=>{ cursor = new Date(year, month-1, 1); draw(); });
+      container.querySelector('[data-avail-next]').addEventListener('click', ()=>{ cursor = new Date(year, month+1, 1); draw(); });
+    }
+    draw();
   }
 
   loadUnits();
