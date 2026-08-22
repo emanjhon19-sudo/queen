@@ -175,6 +175,7 @@
       </div>
       <button class="ct-btn accent" id="ct-add-booking">+ New booking</button>
       <button class="ct-btn" id="ct-payment-settings">Payment settings</button>
+      <button class="ct-btn" id="ct-avail-post">📋 Availability post</button>
       <button class="ct-btn icon theme-toggle" id="theme-toggle" title="Toggle dark mode">🌙</button>
       <button class="ct-btn" id="ct-logout">Log out</button>
     </div>
@@ -185,6 +186,7 @@
   <div class="ct-tabs">
     <button class="ct-tab active" data-tab="calendar" id="tab-calendar">Calendar</button>
     <button class="ct-tab" data-tab="guests" id="tab-guests">Guests<span class="badge" id="requested-badge" style="display:none;">0</span></button>
+    <button class="ct-tab" data-tab="finance" id="tab-finance">Finance</button>
   </div>
 
   <div id="view-calendar">
@@ -222,6 +224,30 @@
       </table>
     </div>
   </div>
+
+  <div id="view-finance" style="display:none;">
+    <div class="ct-toolbar">
+      <div class="ct-month-nav">
+        <button class="ct-btn icon" id="fin-prev">‹</button>
+        <span id="fin-month-label" style="min-width:130px;text-align:center;"></span>
+        <button class="ct-btn icon" id="fin-next">›</button>
+      </div>
+      <button class="ct-btn accent small" id="fin-add-expense">+ Add expense</button>
+    </div>
+    <div class="ct-stats" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px;">
+      <div class="ct-stat" style="--dot:var(--current)"><div class="num mono" id="fin-income">₱0</div><div class="lbl">Income this month</div></div>
+      <div class="ct-stat" style="--dot:var(--checkout)"><div class="num mono" id="fin-expense">₱0</div><div class="lbl">Expenses this month</div></div>
+      <div class="ct-stat" style="--dot:var(--upcoming)"><div class="num mono" id="fin-net">₱0</div><div class="lbl">Net</div></div>
+    </div>
+    <div style="font-family:'Sora',sans-serif;font-weight:700;font-size:15px;margin:6px 0 10px;">By unit</div>
+    <div class="ct-table-wrap" style="margin-bottom:24px;">
+      <table class="ct-table"><thead><tr><th>Unit</th><th>Income</th><th>Expenses</th><th>Net</th></tr></thead><tbody id="fin-unit-tbody"></tbody></table>
+    </div>
+    <div style="font-family:'Sora',sans-serif;font-weight:700;font-size:15px;margin:6px 0 10px;">Expenses this month</div>
+    <div class="ct-table-wrap">
+      <table class="ct-table"><thead><tr><th>Date</th><th>Unit</th><th>Category</th><th>Note</th><th>Amount</th><th></th></tr></thead><tbody id="fin-expense-tbody"></tbody></table>
+    </div>
+  </div>
 </div>
 
 <div id="ct-toast" class="ct-toast"></div>
@@ -246,7 +272,9 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
 (function(){
   let units = [];
   let bookings = [];
+  let expenses = [];
   let currentDate = new Date();
+  let financeDate = new Date();
   let searchTerm = '';
   let guestSearchTerm = '';
   let guestFilter = 'all';
@@ -276,14 +304,14 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
 
   function fromDbBooking(r){
     return { id:r.id, bookingNumber:r.booking_number, unitId:r.unit_id, guest:r.guest, email:r.email, checkIn:r.check_in, checkOut:r.check_out,
-      checkInTime:r.check_in_time, guestsCount:r.guests_count||1,
+      checkInTime:r.check_in_time, guestsCount:r.guests_count||1, needsParking:r.needs_parking||false, amountPaid:r.amount_paid,
       phone:r.phone, notes:r.notes, status:r.status, paymentStatus:r.payment_status||'unpaid',
       checkedInAt:r.checked_in_at, checkedOutAt:r.checked_out_at };
   }
   function orderNumber(bk){ return bk.bookingNumber ? 'LDG-' + String(bk.bookingNumber).padStart(5,'0') : '—'; }
   function toDbBooking(b){
     return { unit_id:b.unitId, guest:b.guest, email:b.email||null, check_in:b.checkIn, check_out:b.checkOut,
-      check_in_time:b.checkInTime||null, guests_count:b.guestsCount||1,
+      check_in_time:b.checkInTime||null, guests_count:b.guestsCount||1, needs_parking: !!b.needsParking,
       phone:b.phone||null, notes:b.notes||null, status:b.status };
   }
   function nightsBetween(a,b){ if(!a||!b) return 0; const d1=new Date(a), d2=new Date(b); const diff = Math.round((d2-d1)/86400000); return diff>0?diff:0; }
@@ -350,15 +378,18 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
   async function loadAll(){
     const { data: u, error: uErr } = await sb.from('units').select('*').order('created_at');
     const { data: b, error: bErr } = await sb.from('bookings').select('*');
+    const { data: e, error: eErr } = await sb.from('expenses').select('*');
     if(uErr || bErr){ showToast('Could not load data'); console.error(uErr, bErr); return; }
     units = u || [];
     bookings = (b||[]).map(fromDbBooking);
+    expenses = eErr ? [] : (e || []);
     render();
   }
   function subscribeRealtime(){
     sb.channel('ledger-changes')
       .on('postgres_changes', { event:'*', schema:'public', table:'units' }, loadAll)
       .on('postgres_changes', { event:'*', schema:'public', table:'bookings' }, loadAll)
+      .on('postgres_changes', { event:'*', schema:'public', table:'expenses' }, loadAll)
       .subscribe();
   }
 
@@ -375,12 +406,15 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
   // ---- tabs ----
   document.getElementById('tab-calendar').addEventListener('click', ()=>switchTab('calendar'));
   document.getElementById('tab-guests').addEventListener('click', ()=>switchTab('guests'));
+  document.getElementById('tab-finance').addEventListener('click', ()=>switchTab('finance'));
   function switchTab(tab){
     activeTab = tab;
     document.getElementById('tab-calendar').classList.toggle('active', tab==='calendar');
     document.getElementById('tab-guests').classList.toggle('active', tab==='guests');
+    document.getElementById('tab-finance').classList.toggle('active', tab==='finance');
     document.getElementById('view-calendar').style.display = tab==='calendar' ? 'block' : 'none';
     document.getElementById('view-guests').style.display = tab==='guests' ? 'block' : 'none';
+    document.getElementById('view-finance').style.display = tab==='finance' ? 'block' : 'none';
     document.getElementById('ct-month-nav-wrap').style.visibility = tab==='calendar' ? 'visible' : 'hidden';
     render();
   }
@@ -520,7 +554,7 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
       }
       return `<tr>
         <td class="mono">${orderNumber(bk)}</td>
-        <td>${escapeHtml(bk.guest)}</td>
+        <td>${escapeHtml(bk.guest)}${bk.needsParking ? ' 🚗' : ''}</td>
         <td>${unit ? escapeHtml(unit.name) : '—'}</td>
         <td>${bk.guestsCount}</td>
         <td>${bk.checkIn}${bk.checkInTime ? ' · '+fmtTime(bk.checkInTime) : ''}</td>
@@ -546,7 +580,15 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
     const bk = bookings.find(b=>b.id===id);
     if(!bk) return;
     const next = bk.paymentStatus === 'paid' ? 'unpaid' : 'paid';
-    const { error } = await sb.from('bookings').update({payment_status: next}).eq('id', id);
+    const payload = { payment_status: next };
+    if(next === 'paid'){
+      const unit = units.find(u=>u.id===bk.unitId);
+      const suggested = (unit && unit.price_per_night) ? unit.price_per_night * nightsBetween(bk.checkIn, bk.checkOut) : '';
+      const entered = prompt('Amount received (₱):', suggested || '');
+      if(entered === null) return; // cancelled
+      payload.amount_paid = entered ? Number(entered) : null;
+    }
+    const { error } = await sb.from('bookings').update(payload).eq('id', id);
     if(error){ showToast('Failed to update payment status'); return; }
     loadAll(); showToast(next === 'paid' ? 'Marked as paid' : 'Marked as unpaid');
   }
@@ -577,8 +619,106 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
 
   function render(){
     renderStats();
-    if(activeTab === 'calendar') renderCalendar(); else renderGuests();
+    if(activeTab === 'calendar') renderCalendar();
+    else if(activeTab === 'guests') renderGuests();
+    else renderFinance();
   }
+
+  // ---- finance ----
+  function fmtPHPFull(n){ return '₱' + Number(n||0).toLocaleString('en-PH', {maximumFractionDigits:0}); }
+  function monthRangeStr(d){
+    const y=d.getFullYear(), m=d.getMonth();
+    const fmt=(x)=>x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');
+    return { start: fmt(new Date(y,m,1)), end: fmt(new Date(y,m+1,1)) };
+  }
+  function renderFinance(){
+    document.getElementById('fin-month-label').textContent = financeDate.toLocaleString('default',{month:'long',year:'numeric'});
+    const { start, end } = monthRangeStr(financeDate);
+    const monthBookings = bookings.filter(b => b.checkIn >= start && b.checkIn < end && b.status !== 'requested');
+    const monthExpenses = expenses.filter(e => e.expense_date >= start && e.expense_date < end);
+
+    const incomeByUnit = {}; let totalIncome = 0;
+    monthBookings.filter(b=>b.paymentStatus==='paid').forEach(b=>{
+      const amt = Number(b.amountPaid || 0);
+      incomeByUnit[b.unitId] = (incomeByUnit[b.unitId]||0) + amt;
+      totalIncome += amt;
+    });
+    const expenseByUnit = {}; let totalExpense = 0; let generalExpense = 0;
+    monthExpenses.forEach(e=>{
+      const amt = Number(e.amount||0);
+      totalExpense += amt;
+      if(e.unit_id){ expenseByUnit[e.unit_id] = (expenseByUnit[e.unit_id]||0) + amt; }
+      else { generalExpense += amt; }
+    });
+    document.getElementById('fin-income').textContent = fmtPHPFull(totalIncome);
+    document.getElementById('fin-expense').textContent = fmtPHPFull(totalExpense);
+    document.getElementById('fin-net').textContent = fmtPHPFull(totalIncome - totalExpense);
+
+    let rows = units.map(u=>{
+      const inc = incomeByUnit[u.id]||0, exp = expenseByUnit[u.id]||0;
+      return `<tr><td>${escapeHtml(u.name)}</td><td class="mono">${fmtPHPFull(inc)}</td><td class="mono">${fmtPHPFull(exp)}</td><td class="mono">${fmtPHPFull(inc-exp)}</td></tr>`;
+    }).join('');
+    if(generalExpense > 0){
+      rows += `<tr><td>General (no unit)</td><td class="mono">—</td><td class="mono">${fmtPHPFull(generalExpense)}</td><td class="mono">${fmtPHPFull(-generalExpense)}</td></tr>`;
+    }
+    document.getElementById('fin-unit-tbody').innerHTML = rows || `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px;">No units yet.</td></tr>`;
+
+    document.getElementById('fin-expense-tbody').innerHTML = monthExpenses.length ? monthExpenses.slice().sort((a,b)=>b.expense_date.localeCompare(a.expense_date)).map(e=>{
+      const unit = units.find(u=>u.id===e.unit_id);
+      return `<tr>
+        <td class="mono">${e.expense_date}</td>
+        <td>${unit ? escapeHtml(unit.name) : 'General'}</td>
+        <td>${escapeHtml(e.category||'—')}</td>
+        <td>${escapeHtml(e.note||'')}</td>
+        <td class="mono">${fmtPHPFull(e.amount)}</td>
+        <td><button class="ct-btn danger small" data-del-expense="${e.id}">Delete</button></td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:24px;">No expenses logged this month.</td></tr>`;
+
+    document.querySelectorAll('[data-del-expense]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        if(!confirm('Delete this expense?')) return;
+        const { error } = await sb.from('expenses').delete().eq('id', btn.dataset.delExpense);
+        if(error){ showToast('Failed to delete'); return; }
+        loadAll(); showToast('Expense deleted');
+      });
+    });
+  }
+
+  document.getElementById('fin-prev').addEventListener('click', ()=>{ financeDate = new Date(financeDate.getFullYear(), financeDate.getMonth()-1, 1); renderFinance(); });
+  document.getElementById('fin-next').addEventListener('click', ()=>{ financeDate = new Date(financeDate.getFullYear(), financeDate.getMonth()+1, 1); renderFinance(); });
+
+  document.getElementById('fin-add-expense').addEventListener('click', ()=>{
+    const overlay = document.createElement('div');
+    overlay.className = 'ct-overlay';
+    overlay.innerHTML = `
+      <div class="ct-modal">
+        <h3>Add expense</h3>
+        <div class="ct-field"><label>Unit (optional)</label><select id="ex-unit"><option value="">General / not unit-specific</option>${units.map(u=>`<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('')}</select></div>
+        <div class="ct-field"><label>Category</label><input id="ex-category" placeholder="e.g. Cleaning, Utilities, Repairs"></div>
+        <div class="ct-field"><label>Amount (₱)</label><input type="number" min="0" id="ex-amount"></div>
+        <div class="ct-field"><label>Date</label><input type="date" id="ex-date" value="${todayStr()}"></div>
+        <div class="ct-field"><label>Note (optional)</label><input id="ex-note"></div>
+        <div class="ct-modal-actions" id="ex-actions"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) overlay.remove(); });
+    const actions = overlay.querySelector('#ex-actions');
+    actions.appendChild(mkBtn('Save', 'ct-btn accent', async ()=>{
+      const amount = Number(overlay.querySelector('#ex-amount').value);
+      if(!amount){ showToast('Enter a valid amount'); return; }
+      const payload = {
+        unit_id: overlay.querySelector('#ex-unit').value || null,
+        category: overlay.querySelector('#ex-category').value.trim() || null,
+        amount, expense_date: overlay.querySelector('#ex-date').value,
+        note: overlay.querySelector('#ex-note').value.trim() || null
+      };
+      const { error } = await sb.from('expenses').insert(payload);
+      if(error){ showToast('Save failed'); console.error(error); return; }
+      overlay.remove(); loadAll(); showToast('Expense added');
+    }));
+    actions.appendChild(mkBtn('Cancel', 'ct-btn', ()=>overlay.remove()));
+  });
 
   // ---- unit modal (add/edit incl. photos, price, address) ----
   function openUnitModal(unit){
@@ -592,6 +732,10 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
         <div class="ct-field"><label>Unit name</label><input id="um-name" value="${unit ? escapeHtml(unit.name) : ''}" placeholder="e.g. Unit 401"></div>
         <div class="ct-field"><label>Address</label><input id="um-address" value="${unit && unit.address ? escapeHtml(unit.address) : ''}" placeholder="e.g. 123 Roxas Ave, Davao City"></div>
         <div class="ct-field"><label>Price per night (₱)</label><input type="number" min="0" id="um-price" value="${unit && unit.price_per_night ? unit.price_per_night : ''}" placeholder="e.g. 2500"></div>
+        <div class="ct-row2">
+          <div class="ct-field"><label>Included guests</label><input type="number" min="1" id="um-maxguests" value="${unit && unit.max_guests ? unit.max_guests : ''}" placeholder="e.g. 2"></div>
+          <div class="ct-field"><label>Excess guest fee (₱)</label><input type="number" min="0" id="um-excessfee" value="${unit && unit.excess_guest_fee ? unit.excess_guest_fee : ''}" placeholder="e.g. 200"></div>
+        </div>
         <div class="ct-field"><label>Photo URL 1</label><input id="um-photo1" value="${escapeHtml(photos[0]||'')}" placeholder="https://…"></div>
         <div class="ct-field"><label>Photo URL 2 (optional)</label><input id="um-photo2" value="${escapeHtml(photos[1]||'')}" placeholder="https://…"></div>
         <div class="ct-field"><label>Photo URL 3 (optional)</label><input id="um-photo3" value="${escapeHtml(photos[2]||'')}" placeholder="https://…"></div>
@@ -607,8 +751,12 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
       const address = overlay.querySelector('#um-address').value.trim();
       const priceVal = overlay.querySelector('#um-price').value;
       const price_per_night = priceVal ? Number(priceVal) : null;
+      const maxGuestsVal = overlay.querySelector('#um-maxguests').value;
+      const max_guests = maxGuestsVal ? Number(maxGuestsVal) : null;
+      const excessFeeVal = overlay.querySelector('#um-excessfee').value;
+      const excess_guest_fee = excessFeeVal ? Number(excessFeeVal) : null;
       const photo_urls = [overlay.querySelector('#um-photo1').value.trim(), overlay.querySelector('#um-photo2').value.trim(), overlay.querySelector('#um-photo3').value.trim()].filter(Boolean);
-      const payload = { name, address: address || null, price_per_night, photo_urls };
+      const payload = { name, address: address || null, price_per_night, max_guests, excess_guest_fee, photo_urls };
       let error;
       if(unit){ ({ error } = await sb.from('units').update(payload).eq('id', unit.id)); }
       else { ({ error } = await sb.from('units').insert(payload)); }
@@ -656,6 +804,11 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
           <div class="ct-field"><label># of guests</label><input type="number" min="1" id="mf-guests" value="${existing ? existing.guestsCount : 1}"></div>
           <div class="ct-field"><label>Phone (optional)</label><input id="mf-phone" value="${existing && existing.phone ? escapeHtml(existing.phone) : ''}" placeholder="+63 9xx xxx xxxx"></div>
         </div>
+        <div class="ct-field" style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="mf-parking" ${existing && existing.needsParking ? 'checked' : ''} style="width:auto;">
+          <label for="mf-parking" style="margin:0;color:var(--text);">Needs a parking slot</label>
+        </div>
+        ${existing && existing.amountPaid ? `<div style="color:var(--text-dim);font-size:12px;margin-bottom:12px;">Amount received: ${fmtPHP(existing.amountPaid)}</div>` : ''}
         <div class="ct-field"><label>Notes (optional)</label><textarea id="mf-notes" placeholder="Late arrival, parking, etc.">${existing && existing.notes ? escapeHtml(existing.notes) : ''}</textarea></div>
         <div class="ct-modal-actions" id="mf-actions"></div>
       </div>`;
@@ -666,7 +819,15 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
       const paidToggle = overlay.querySelector('#mf-paid-toggle');
       paidToggle.addEventListener('click', async ()=>{
         const next = existing.paymentStatus === 'paid' ? 'unpaid' : 'paid';
-        const { error } = await sb.from('bookings').update({payment_status: next}).eq('id', existing.id);
+        const payload = { payment_status: next };
+        if(next === 'paid'){
+          const unit = units.find(u=>u.id===existing.unitId);
+          const suggested = (unit && unit.price_per_night) ? unit.price_per_night * nightsBetween(existing.checkIn, existing.checkOut) : '';
+          const entered = prompt('Amount received (₱):', suggested || '');
+          if(entered === null) return;
+          payload.amount_paid = entered ? Number(entered) : null;
+        }
+        const { error } = await sb.from('bookings').update(payload).eq('id', existing.id);
         if(error){ showToast('Failed to update payment status'); return; }
         existing.paymentStatus = next;
         paidToggle.textContent = next === 'paid' ? 'Paid' : 'Unpaid';
@@ -684,12 +845,13 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
       const cit = overlay.querySelector('#mf-intime').value;
       const co = overlay.querySelector('#mf-out').value;
       const guestsCount = parseInt(overlay.querySelector('#mf-guests').value, 10) || 1;
+      const needsParking = overlay.querySelector('#mf-parking').checked;
       const phone = overlay.querySelector('#mf-phone').value.trim();
       const notes = overlay.querySelector('#mf-notes').value.trim();
       if(!guest){ showToast('Guest name is required'); return null; }
       if(!ci || !co){ showToast('Check-in and check-out dates are required'); return null; }
       if(co <= ci){ showToast('Check-out must be after check-in'); return null; }
-      return {guest, email: email || null, unitId:uId, checkIn:ci, checkInTime: cit || null, checkOut:co, guestsCount, phone, notes};
+      return {guest, email: email || null, unitId:uId, checkIn:ci, checkInTime: cit || null, checkOut:co, guestsCount, needsParking, phone, notes};
     }
 
     actions.appendChild(mkBtn('Save', 'ct-btn accent', async ()=>{
@@ -782,6 +944,72 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
     actions.appendChild(mkBtn('Cancel', 'ct-btn', ()=>overlay.remove()));
   }
   document.getElementById('ct-payment-settings').addEventListener('click', openPaymentSettingsModal);
+
+  // ---- daily availability post generator ----
+  function chunk(arr, size){ const out=[]; for(let i=0;i<arr.length;i+=size) out.push(arr.slice(i,i+size)); return out; }
+
+  function generateAvailabilityText(unit, monthDate){
+    const year = monthDate.getFullYear(), month = monthDate.getMonth();
+    const daysInMonth = new Date(year, month+1, 0).getDate();
+    const today = new Date(); today.setHours(0,0,0,0);
+    const unitBookings = bookings.filter(b => b.unitId === unit.id && b.status !== 'checked-out');
+    const available = [];
+    for(let d=1; d<=daysInMonth; d++){
+      const date = new Date(year, month, d);
+      if(date < today) continue;
+      const booked = unitBookings.some(bk => date >= parseDate(bk.checkIn) && date < parseDate(bk.checkOut));
+      if(!booked) available.push(d);
+    }
+    const rows = chunk(available, 7);
+    const checkRows = rows.map(r => r.map(()=> '✅').join('')).join('\n');
+    const dateRows = rows.map(r => r.join(' ')).join('\n');
+    const monthLabel = monthDate.toLocaleString('default',{month:'long'}).toUpperCase();
+    let msg = `${monthLabel} UPDATED CALENDAR\n\n💗${unit.name.toUpperCase()}💗\n${checkRows}\n${dateRows}`;
+    if(unit.price_per_night){
+      msg += `\n\n💗${fmtPHP(unit.price_per_night)}${unit.max_guests ? '-'+unit.max_guests+'pax' : ''}`;
+    }
+    if(unit.excess_guest_fee){
+      msg += `\n${fmtPHP(unit.excess_guest_fee)}- excess`;
+    }
+    return msg;
+  }
+
+  function openAvailabilityPostModal(){
+    if(units.length === 0){ showToast('Add a unit first'); return; }
+    const overlay = document.createElement('div');
+    overlay.className = 'ct-overlay';
+    let cursor = new Date();
+    overlay.innerHTML = `
+      <div class="ct-modal">
+        <h3>Availability post</h3>
+        <div style="color:var(--text-dim);font-size:12.5px;margin-bottom:14px;">Generates from today's live booking data — copy and post it wherever you share updates.</div>
+        <div class="ct-row2">
+          <div class="ct-field"><label>Unit</label><select id="ap-unit">${units.map(u=>`<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('')}</select></div>
+          <div class="ct-field"><label>Month</label><input type="month" id="ap-month" value="${cursor.getFullYear()}-${String(cursor.getMonth()+1).padStart(2,'0')}"></div>
+        </div>
+        <textarea id="ap-output" readonly style="width:100%;min-height:220px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text);white-space:pre-wrap;"></textarea>
+        <div class="ct-modal-actions" id="ap-actions"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) overlay.remove(); });
+
+    function refresh(){
+      const unit = units.find(u=>u.id===overlay.querySelector('#ap-unit').value);
+      const [y,m] = overlay.querySelector('#ap-month').value.split('-').map(Number);
+      overlay.querySelector('#ap-output').value = generateAvailabilityText(unit, new Date(y, m-1, 1));
+    }
+    overlay.querySelector('#ap-unit').addEventListener('change', refresh);
+    overlay.querySelector('#ap-month').addEventListener('change', refresh);
+    refresh();
+
+    const actions = overlay.querySelector('#ap-actions');
+    actions.appendChild(mkBtn('Copy to clipboard', 'ct-btn accent', async ()=>{
+      try{ await navigator.clipboard.writeText(overlay.querySelector('#ap-output').value); showToast('Copied!'); }
+      catch(e){ showToast('Could not copy — select the text manually'); }
+    }));
+    actions.appendChild(mkBtn('Close', 'ct-btn', ()=>overlay.remove()));
+  }
+  document.getElementById('ct-avail-post').addEventListener('click', openAvailabilityPostModal);
 
   document.getElementById('ct-prev').addEventListener('click', ()=>{ currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth()-1, 1); renderCalendar(); });
   document.getElementById('ct-next').addEventListener('click', ()=>{ currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth()+1, 1); renderCalendar(); });
