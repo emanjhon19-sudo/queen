@@ -62,7 +62,7 @@
   .unit-card{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; cursor:pointer; box-shadow:var(--shadow-sm); transition:transform .18s ease, box-shadow .18s ease; }
   .unit-card:hover{ transform:translateY(-3px); box-shadow:var(--shadow-md); }
   .unit-photo{ width:100%; height:180px; background:var(--surface-2); position:relative; overflow:hidden; }
-  .unit-photo img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .unit-photo img{ width:100%; height:100%; object-fit:cover; display:block; cursor:zoom-in; }
   .unit-photo-empty{ display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-faint); font-family:'Sora',sans-serif; font-weight:600; font-size:14px; }
   .price-badge{ position:absolute; left:10px; bottom:10px; background:rgba(255,255,255,0.92); backdrop-filter:blur(4px); color:var(--text); font-family:'Sora',sans-serif; font-weight:700; font-size:13px; padding:5px 11px; border-radius:999px; box-shadow:var(--shadow-sm); }
   .price-badge span{ color:var(--text-faint); font-weight:500; font-size:11px; font-family:'Inter',sans-serif; }
@@ -78,7 +78,13 @@
   .ct-modal .sub{ color:var(--text-dim); font-size:13px; margin-bottom:6px; }
   .modal-address{ color:var(--text-faint); font-size:12.5px; margin-bottom:16px; }
   .gallery{ display:flex; gap:6px; margin-bottom:16px; }
-  .gallery img{ width:100%; height:92px; object-fit:cover; border-radius:10px; border:1px solid var(--border); }
+  .gallery img{ width:100%; height:92px; object-fit:cover; border-radius:10px; border:1px solid var(--border); cursor:zoom-in; }
+  .lightbox{ position:fixed; inset:0; background:rgba(0,0,0,0.88); z-index:100; display:flex; align-items:center; justify-content:center; padding:30px; }
+  .lightbox img{ max-width:100%; max-height:100%; object-fit:contain; border-radius:8px; }
+  .lightbox-close{ position:absolute; top:18px; right:22px; background:rgba(255,255,255,0.12); border:none; color:#fff; width:38px; height:38px; border-radius:50%; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .lightbox-nav{ position:absolute; top:50%; transform:translateY(-50%); background:rgba(255,255,255,0.12); border:none; color:#fff; width:44px; height:44px; border-radius:50%; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .lightbox-prev{ left:16px; } .lightbox-next{ right:16px; }
+  .lightbox-count{ position:absolute; bottom:18px; left:50%; transform:translateX(-50%); color:rgba(255,255,255,0.75); font-family:'IBM Plex Mono',monospace; font-size:12px; }
   .ct-field{margin-bottom:13px;}
   .ct-field label{ display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:5px; font-weight:500; }
   .ct-field input, .ct-field textarea{ width:100%; background:var(--surface-2); border:1px solid var(--border); color:var(--text); border-radius:var(--radius-sm); padding:10px 12px; font-family:'Inter',sans-serif; font-size:13.5px; }
@@ -108,8 +114,8 @@
       <a href="staff.html">Staff login →</a>
     </div>
     <div class="hero">
-      <h1 class="disp">Welcome to Queen's Space!</h1>
-      <p>Pick a unit below to request a booking and we'll confirm with you shortly.</p>
+      <h1 class="disp">Find your stay</h1>
+      <p>Pick a unit below to request a booking — we'll confirm with you shortly.</p>
     </div>
     <div class="grid" id="units-grid"></div>
   </div>
@@ -127,6 +133,34 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   function fmtPHP(n){ return '₱' + Number(n).toLocaleString('en-PH', {maximumFractionDigits:0}); }
   function nightsBetween(a,b){ if(!a||!b) return 0; const d1=new Date(a), d2=new Date(b); const diff = Math.round((d2-d1)/86400000); return diff>0?diff:0; }
   function mapsUrl(addr){ return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr); }
+
+  function openLightbox(photos, startIndex){
+    if(!photos || !photos.length) return;
+    let idx = startIndex || 0;
+    const box = document.createElement('div');
+    box.className = 'lightbox';
+    function render(){
+      box.innerHTML = `
+        <button class="lightbox-close" type="button">✕</button>
+        ${photos.length>1 ? '<button class="lightbox-nav lightbox-prev" type="button">‹</button><button class="lightbox-nav lightbox-next" type="button">›</button>' : ''}
+        <img src="${escapeHtml(photos[idx])}">
+        ${photos.length>1 ? `<div class="lightbox-count">${idx+1} / ${photos.length}</div>` : ''}
+      `;
+      box.querySelector('.lightbox-close').addEventListener('click', ()=>box.remove());
+      const prev = box.querySelector('.lightbox-prev'), next = box.querySelector('.lightbox-next');
+      if(prev) prev.addEventListener('click', (e)=>{ e.stopPropagation(); idx = (idx-1+photos.length)%photos.length; render(); });
+      if(next) next.addEventListener('click', (e)=>{ e.stopPropagation(); idx = (idx+1)%photos.length; render(); });
+    }
+    render();
+    box.addEventListener('click', (e)=>{ if(e.target===box) box.remove(); });
+    document.addEventListener('keydown', function onKey(e){
+      if(!document.body.contains(box)){ document.removeEventListener('keydown', onKey); return; }
+      if(e.key==='Escape') box.remove();
+      if(e.key==='ArrowLeft' && photos.length>1){ idx=(idx-1+photos.length)%photos.length; render(); }
+      if(e.key==='ArrowRight' && photos.length>1){ idx=(idx+1)%photos.length; render(); }
+    });
+    document.body.appendChild(box);
+  }
 
   const themeBtn = document.getElementById('theme-toggle');
   function applyThemeIcon(){ themeBtn.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '☀️' : '🌙'; }
@@ -159,7 +193,12 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       </div>`;
     }).join('');
     grid.querySelectorAll('.unit-card').forEach(card=>{
-      card.addEventListener('click', ()=> openBookingForm(JSON.parse(card.dataset.unit.replace(/&apos;/g,"'"))));
+      const unitData = JSON.parse(card.dataset.unit.replace(/&apos;/g,"'"));
+      card.addEventListener('click', ()=> openBookingForm(unitData));
+      const img = card.querySelector('.unit-photo img');
+      if(img){
+        img.addEventListener('click', (e)=>{ e.stopPropagation(); openLightbox(unitData.photo_urls || [], 0); });
+      }
     });
   }
 
@@ -185,6 +224,10 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         <div class="ct-row2">
           <div class="ct-field"># of guests<input type="number" min="1" id="bf-guests" value="1"></div>
         </div>
+        <div class="ct-field" style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="bf-parking" style="width:auto;">
+          <label for="bf-parking" style="margin:0;color:var(--text);font-size:13.5px;">I'll need a parking slot</label>
+        </div>
         <div class="ct-row3">
           <div class="ct-field"><label>Check-in date</label><input type="date" id="bf-in" value="${todayStr()}"></div>
           <div class="ct-field"><label>Arrival time</label><input type="time" id="bf-intime"></div>
@@ -201,11 +244,14 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     overlay.addEventListener('click', (e)=>{ if(e.target===overlay) overlay.remove(); });
     overlay.querySelector('#bf-cancel').addEventListener('click', ()=>overlay.remove());
 
+    overlay.querySelectorAll('.gallery img').forEach((img, i)=>{
+      img.addEventListener('click', ()=> openLightbox(photos, i));
+    });
+
     renderAvailCalendar(unit, overlay, new Date());
 
     if(unit.price_per_night){
-      const updateTotal = ()=>{
-        const ci = overlay.querySelector('#bf-in').value;
+      const updateTotal = ()=>{        const ci = overlay.querySelector('#bf-in').value;
         const co = overlay.querySelector('#bf-out').value;
         const n = nightsBetween(ci, co);
         const lbl = overlay.querySelector('#bf-total-lbl');
@@ -224,6 +270,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       const email = overlay.querySelector('#bf-email').value.trim();
       const phone = overlay.querySelector('#bf-phone').value.trim();
       const guestsCount = parseInt(overlay.querySelector('#bf-guests').value,10) || 1;
+      const needsParking = overlay.querySelector('#bf-parking').checked;
       const checkIn = overlay.querySelector('#bf-in').value;
       const checkInTime = overlay.querySelector('#bf-intime').value;
       const checkOut = overlay.querySelector('#bf-out').value;
@@ -237,7 +284,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       const { error } = await sb.from('bookings').insert({
         unit_id: unit.id, guest, email, phone: phone || null, guests_count: guestsCount,
         check_in: checkIn, check_in_time: checkInTime || null, check_out: checkOut,
-        notes: notes || null, status: 'requested'
+        notes: notes || null, status: 'requested', needs_parking: needsParking
       });
       if(error){ errEl.textContent = "Something went wrong — please try again."; console.error(error); return; }
 
