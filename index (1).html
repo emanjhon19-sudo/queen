@@ -134,6 +134,11 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   function nightsBetween(a,b){ if(!a||!b) return 0; const d1=new Date(a), d2=new Date(b); const diff = Math.round((d2-d1)/86400000); return diff>0?diff:0; }
   function mapsUrl(addr){ return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr); }
 
+  let parkingFee = 0;
+  sb.from('payment_settings').select('parking_fee').eq('id', true).single()
+    .then(({data}) => { parkingFee = (data && data.parking_fee) ? Number(data.parking_fee) : 0; })
+    .catch(()=>{});
+
   function openLightbox(photos, startIndex){
     if(!photos || !photos.length) return;
     let idx = startIndex || 0;
@@ -226,7 +231,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         </div>
         <div class="ct-field" style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" id="bf-parking" style="width:auto;">
-          <label for="bf-parking" style="margin:0;color:var(--text);font-size:13.5px;">I'll need a parking slot</label>
+          <label for="bf-parking" style="margin:0;color:var(--text);font-size:13.5px;">I'll need a parking slot${parkingFee ? ` (+${fmtPHP(parkingFee)})` : ''}</label>
         </div>
         <div class="ct-row3">
           <div class="ct-field"><label>Check-in date</label><input type="date" id="bf-in" value="${todayStr()}"></div>
@@ -251,16 +256,22 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     renderAvailCalendar(unit, overlay, new Date());
 
     if(unit.price_per_night){
-      const updateTotal = ()=>{        const ci = overlay.querySelector('#bf-in').value;
+      const updateTotal = ()=>{
+        const ci = overlay.querySelector('#bf-in').value;
         const co = overlay.querySelector('#bf-out').value;
         const n = nightsBetween(ci, co);
+        const parkingOn = overlay.querySelector('#bf-parking').checked;
         const lbl = overlay.querySelector('#bf-total-lbl');
         const amt = overlay.querySelector('#bf-total-amt');
-        if(n > 0){ lbl.textContent = `${n} night${n>1?'s':''} × ${fmtPHP(unit.price_per_night)}`; amt.textContent = fmtPHP(n * unit.price_per_night); }
-        else { lbl.textContent = 'Select dates to see total'; amt.textContent = ''; }
+        if(n > 0){
+          const total = n * unit.price_per_night + (parkingOn ? parkingFee : 0);
+          lbl.textContent = `${n} night${n>1?'s':''} × ${fmtPHP(unit.price_per_night)}${parkingOn && parkingFee ? ' + parking' : ''}`;
+          amt.textContent = fmtPHP(total);
+        } else { lbl.textContent = 'Select dates to see total'; amt.textContent = ''; }
       };
       overlay.querySelector('#bf-in').addEventListener('change', updateTotal);
       overlay.querySelector('#bf-out').addEventListener('change', updateTotal);
+      overlay.querySelector('#bf-parking').addEventListener('change', updateTotal);
       updateTotal();
     }
 
