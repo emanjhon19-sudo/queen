@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script>(function(){var t=localStorage.getItem('theme')||(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);})();</script>
+<link rel="manifest" href="manifest-staff.json">
+<meta name="theme-color" content="#0EA5A0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ledger Staff">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>Staff Dashboard — The Ledger</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -26,6 +32,8 @@
     --shadow-sm:0 1px 2px rgba(0,0,0,.35);
     --shadow-md:0 10px 30px rgba(0,0,0,.5);
   }
+  .offline-banner{ display:none; background:var(--checkout); color:#fff; font-size:12.5px; font-weight:600; text-align:center; padding:8px 14px; border-radius:var(--radius-sm); margin-bottom:14px; }
+  body.is-offline .offline-banner{ display:block; }
   .theme-toggle{ background:var(--surface-2); border:1px solid var(--border); color:var(--text-dim); border-radius:999px; }
   .paid-pill{ display:inline-block; font-family:'IBM Plex Mono',monospace; font-size:9.5px; text-transform:uppercase; letter-spacing:0.5px; padding:2px 7px; border-radius:20px; font-weight:700; }
   .paid-pill.paid{ background:var(--accent-soft); color:var(--accent-hover); }
@@ -161,6 +169,7 @@
 </div>
 
 <div id="ct-root">
+  <div class="offline-banner" id="offline-banner">📴 You're offline — showing your last synced data. You can view bookings, guests and finance, but changes need a connection.</div>
   <div class="ct-header">
     <div>
       <div class="ct-title">The Ledger <span class="sub">unit occupancy board</span></div>
@@ -366,8 +375,18 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
   }
 
   async function checkSession(){
-    const { data:{ session } } = await sb.auth.getSession();
-    if(session){ onLoggedIn(session); } else { showLogin(); }
+    let session = null;
+    try{ ({ data:{ session } } = await sb.auth.getSession()); }catch(e){}
+    if(session){ onLoggedIn(session); return; }
+    // no usable session: if we're offline and this device has a synced copy from an earlier login, open it read-only
+    if(!navigator.onLine && localStorage.getItem(CACHE_KEY)){
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('ct-root').style.display = 'block';
+      document.getElementById('ct-user-email').textContent = 'offline copy';
+      loadFromCache(); setOfflineUI(true); render();
+      return;
+    }
+    showLogin();
   }
   function showLogin(){ document.getElementById('login-screen').style.display = 'flex'; document.getElementById('ct-root').style.display = 'none'; }
   function onLoggedIn(session){
@@ -375,7 +394,7 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
     document.getElementById('ct-root').style.display = 'block';
     document.getElementById('ct-user-email').textContent = session.user.email;
     loadAll();
-    subscribeRealtime();
+    if(navigator.onLine) subscribeRealtime();
   }
   document.getElementById('login-btn').addEventListener('click', doLogin);
   document.getElementById('login-password').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
@@ -387,20 +406,75 @@ if(window.emailjs && EMAILJS_PUBLIC_KEY !== 'YOUR_EMAILJS_PUBLIC_KEY'){
     if(error){ errEl.textContent = error.message; return; }
     onLoggedIn(data.session);
   }
-  document.getElementById('ct-logout').addEventListener('click', async ()=>{ await sb.auth.signOut(); location.reload(); });
+  document.getElementById('ct-logout').addEventListener('click', async ()=>{
+    try{ localStorage.removeItem(CACHE_KEY); }catch(e){}   // logging out also wipes the offline copy from this device
+    try{ await sb.auth.signOut(); }catch(e){}
+    location.reload();
+  });
 
   async function loadAll(){
+    if(!navigator.onLine){ if(loadFromCache()) render(); return; }
     const { data: u, error: uErr } = await sb.from('units').select('*').order('created_at');
     const { data: b, error: bErr } = await sb.from('bookings').select('*');
     const { data: e, error: eErr } = await sb.from('expenses').select('*');
     const { data: ps } = await sb.from('payment_settings').select('*').eq('id', true).single();
+    if(uErr || bErr){
+      console.error(uErr, bErr);
+      // server unreachable (weak signal etc.) — show the last synced copy instead of a blank screen
+      if(loadFromCache()){ setOfflineUI(true); render(); } else { showToast('Could not load data'); }
+      return;
+    }
     paymentSettings = ps || {};
-    if(uErr || bErr){ showToast('Could not load data'); console.error(uErr, bErr); return; }
     units = u || [];
     bookings = (b||[]).map(fromDbBooking);
     expenses = eErr ? [] : (e || []);
+    saveToCache();
+    setOfflineUI(false);
     render();
   }
+
+  // ---- offline support: keep a local copy of the last synced data ----
+  const CACHE_KEY = 'ledger_cache_v1';
+  function saveToCache(){
+    try{ localStorage.setItem(CACHE_KEY, JSON.stringify({ units, bookings, expenses, paymentSettings, ts: Date.now() })); }catch(e){}
+  }
+  function loadFromCache(){
+    try{
+      const raw = localStorage.getItem(CACHE_KEY);
+      if(!raw) return false;
+      const c = JSON.parse(raw);
+      units = c.units || []; bookings = c.bookings || []; expenses = c.expenses || []; paymentSettings = c.paymentSettings || {};
+      return true;
+    }catch(e){ return false; }
+  }
+  function setOfflineUI(off){
+    document.body.classList.toggle('is-offline', !!off);
+    const banner = document.getElementById('offline-banner');
+    if(off){
+      let when = '';
+      try{ const c = JSON.parse(localStorage.getItem(CACHE_KEY)||'{}'); if(c.ts) when = ' (last synced ' + new Date(c.ts).toLocaleString('default',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) + ')'; }catch(e){}
+      banner.textContent = "📴 You're offline — showing your last synced data" + when + ". You can view bookings, guests and finance, but changes need a connection.";
+    }
+  }
+  // while offline, block saving instead of failing in confusing ways
+  const _from = sb.from.bind(sb);
+  sb.from = function(table){
+    const q = _from(table);
+    if(navigator.onLine) return q;
+    const blocked = function(){
+      showToast("You're offline — reconnect to make changes");
+      const o = { eq:()=>o, select:()=>o, single:()=>o, order:()=>o,
+                  then:(res)=>res({ data:null, error:{ message:'offline' } }) };
+      return o;
+    };
+    return { select:(...a)=>q.select(...a), insert:blocked, update:blocked, delete:blocked, upsert:blocked };
+  };
+  window.addEventListener('offline', ()=>{ setOfflineUI(true); });
+  window.addEventListener('online', ()=>{
+    if(document.getElementById('ct-user-email').textContent === 'offline copy'){ location.reload(); return; }
+    setOfflineUI(false); showToast('Back online — syncing…'); loadAll();
+  });
+  if('serviceWorker' in navigator){ window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
   function subscribeRealtime(){
     sb.channel('ledger-changes')
       .on('postgres_changes', { event:'*', schema:'public', table:'units' }, loadAll)

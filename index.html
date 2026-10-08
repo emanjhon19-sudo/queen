@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script>(function(){var t=localStorage.getItem('theme')||(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',t);})();</script>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0EA5A0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Book a Unit">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>Book a Unit</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -123,8 +129,7 @@
     </div>
     <div class="hero">
       <h1 class="disp">Find your stay</h1>
-      <p>Chooose your unit anc book</p>
-      <h3>Developed by ejpbdevcom</h3>
+      <p>Pick a unit below to request a booking — we'll confirm with you shortly.</p>
     </div>
     <div class="grid" id="units-grid"></div>
   </div>
@@ -182,8 +187,13 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   });
 
   async function loadUnits(){
-    const { data, error } = await sb.from('units').select('*').order('created_at');
+    let { data, error } = await sb.from('units').select('*').order('created_at');
     const grid = document.getElementById('units-grid');
+    if(!error && data){ try{ localStorage.setItem('ledger_units_v1', JSON.stringify(data)); }catch(e){} }
+    if(error || !data){
+      // offline / unreachable: show the last list this device saw, if any
+      try{ const c = JSON.parse(localStorage.getItem('ledger_units_v1') || 'null'); if(c){ data = c; error = null; } }catch(e){}
+    }
     if(error){ grid.innerHTML = `<div class="empty-state">Couldn't load units right now — please try again shortly.</div>`; console.error(error); return; }
     if(!data || data.length === 0){ grid.innerHTML = `<div class="empty-state">No units available yet.</div>`; return; }
     grid.innerHTML = data.map(u=>{
@@ -305,6 +315,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       if(!email){ errEl.textContent = 'Please enter your email so we can confirm your booking.'; return; }
       if(!checkIn || !checkOut){ errEl.textContent = 'Please choose check-in and check-out dates.'; return; }
       if(checkOut <= checkIn){ errEl.textContent = 'Check-out must be after check-in.'; return; }
+      if(!navigator.onLine){ errEl.textContent = "You're offline — please reconnect to send your request."; return; }
 
       const { error } = await sb.from('bookings').insert({
         unit_id: unit.id, guest, email, phone: phone || null, guests_count: guestsCount,
@@ -359,6 +370,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     draw();
   }
 
+  if('serviceWorker' in navigator){ window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
   loadUnits();
 })();
 </script>
