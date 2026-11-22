@@ -126,14 +126,19 @@
     footer {
       background-color: #222;
       color: #fff;
-      padding: 5px;
+      padding: 20px;
+    }
+
+    /* New inner wrapper that stays centered and limits the spread */
+    .footer-container {
+      max-width: 800px; /* Adjust this number to bring them closer or further apart */
+      margin: 0 auto;   /* Centers the container horizontally */
       
-      /* Places items side-by-side on opposite ends */
       display: flex;
       justify-content: space-between;
       align-items: center;
-      flex-wrap: wrap; /* Stacks them cleanly on tiny mobile screens */
-      gap: 10px;
+      flex-wrap: wrap;
+      gap: 15px;
     }
 
     footer p, footer address {
