@@ -121,6 +121,21 @@
   .success p{ color:var(--text-dim); font-size:13.5px; }
 </style>
 </head>
+  <title>Footer Example</title>
+  <style>
+    footer {
+      background-color: #222;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+    }
+    footer a {
+      color: #4da6ff;
+      text-decoration: none;
+      margin: 0 10px;
+    }
+  </style>
+</head>
 <body>
   <div class="wrap">
     <div class="topbar">
@@ -129,7 +144,7 @@
     </div>
     <div class="hero">
       <h1 class="disp">Find your stay</h1>
-      <p>Pick a unit below to request a booking — we'll confirm with you shortly.</p>
+      <p>Choose the best unit that matches your personality.</p>
     </div>
     <div class="grid" id="units-grid"></div>
   </div>
@@ -312,13 +327,12 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       const notes = overlay.querySelector('#bf-notes').value.trim();
       const errEl = overlay.querySelector('#bf-err'); errEl.textContent = '';
       if(!guest){ errEl.textContent = 'Please enter your name.'; return; }
-      if(!email){ errEl.textContent = 'Please enter your email so we can confirm your booking.'; return; }
       if(!checkIn || !checkOut){ errEl.textContent = 'Please choose check-in and check-out dates.'; return; }
       if(checkOut <= checkIn){ errEl.textContent = 'Check-out must be after check-in.'; return; }
       if(!navigator.onLine){ errEl.textContent = "You're offline — please reconnect to send your request."; return; }
 
       const { error } = await sb.from('bookings').insert({
-        unit_id: unit.id, guest, email, phone: phone || null, guests_count: guestsCount,
+        unit_id: unit.id, guest, phone: phone || null, email, guests_count: guestsCount,
         check_in: checkIn, check_in_time: checkInTime || null, check_out: checkOut,
         notes: notes || null, status: 'requested', needs_parking: needsParking
       });
@@ -373,6 +387,17 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   if('serviceWorker' in navigator){ window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
   loadUnits();
 })();
+
+  
 </script>
+  <footer>
+    <p>&copy; Developed by emanjhonbajo.</p>
+    <nav>
+      <a href="/contact">Contact</a>
+    </nav>
+    <address>
+      Contact us at: <a href="mailto:emanjhon12@gmail.com">info@example.com</a>
+    </address>
+  </footer>
 </body>
 </html>
