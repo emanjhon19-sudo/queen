@@ -126,13 +126,24 @@
     footer {
       background-color: #222;
       color: #fff;
-      text-align: left;
-      padding: 20px;
+      padding: 5px;
+      
+      /* Places items side-by-side on opposite ends */
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap; /* Stacks them cleanly on tiny mobile screens */
+      gap: 10px;
     }
+
+    footer p, footer address {
+      margin: 0;
+      font-style: normal;
+    }
+
     footer a {
       color: #4da6ff;
       text-decoration: none;
-      margin: 0 10px;
     }
   </style>
 </head>
